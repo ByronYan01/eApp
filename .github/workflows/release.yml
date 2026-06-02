@@ -1,0 +1,58 @@
+name: "Publish Release"
+
+on:
+  push:
+    # 当您推送以 "v" 开头的标签（例如 v0.1.0）时，自动触发打包
+    tags:
+      - 'v*'
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-latest" # 编译 Mac 安装包
+            args: "--target universal-apple-darwin" # 编译为通用包，同时兼容 Intel 与 M系列芯片
+          - platform: "windows-latest" # 编译 Windows 安装包
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # 打包 Mac 通用包所需的 Rust Target
+          targets: ${{ matrix.platform == 'macos-latest' && 'x86_64-apple-darwin,aarch64-apple-darwin' || '' }}
+
+      # 使用缓存来加速后续的 Rust 编译过程
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      # 执行 Tauri 打包并将生成的安装包上传至 GitHub Release
+      - name: Build and Publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "eApp v__VERSION__"
+          releaseBody: "这是由 GitHub Actions 自动编译生成的版本。包含了 macOS 和 Windows 平台的安装包。"
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

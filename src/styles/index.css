@@ -1,0 +1,108 @@
+@import './variables.css';
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+/* 全局重置与排版规范 */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none; /* 默认桌面客户端不让文本可随意拖选，但句子内容我们需要单独配置为可选择 */
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  transition: background-color var(--transition-smooth);
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 英语句子与文本可供用户复制或点选 */
+.selectable {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* 动态背景发光圈 (Glow Orbs) - 营造深邃且高级的星空光晕效果 */
+.bg-glow-orb-1,
+.bg-glow-orb-2 {
+  position: absolute;
+  width: 450px;
+  height: 450px;
+  border-radius: 50%;
+  filter: blur(120px);
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.bg-glow-orb-1 {
+  background: var(--bg-glow-1);
+  top: -100px;
+  right: -50px;
+  animation: floatOrb1 20s infinite alternate ease-in-out;
+}
+
+.bg-glow-orb-2 {
+  background: var(--bg-glow-2);
+  bottom: -150px;
+  left: -50px;
+  animation: floatOrb2 25s infinite alternate ease-in-out;
+}
+
+/* 背景光球漂移动画 */
+@keyframes floatOrb1 {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(-80px, 50px) scale(1.2); }
+}
+
+@keyframes floatOrb2 {
+  0% { transform: translate(0, 0) scale(1.1); }
+  100% { transform: translate(60px, -60px) scale(0.9); }
+}
+
+/* 自定义极简滚动条 (用于学习列表) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-glow);
+}
+
+/* 常用按钮和交互基础样式 */
+button, input {
+  font-family: inherit;
+  outline: none;
+  border: none;
+}
+
+/* 动画工具类 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--transition-fast);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}

@@ -1,0 +1,60 @@
+/* 全局设计系统 Token - 英语句子学习客户端 */
+
+:root {
+  /* 字体系统 */
+  --font-sans: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  /* 主题色彩 - 默认深色模式 (为了极致的 Premium 体验) */
+  --bg-app: #070913;                 /* 极深邃的星空底色 */
+  --bg-glow-1: rgba(99, 102, 241, 0.15); /* 紫蓝色发光晕 */
+  --bg-glow-2: rgba(16, 185, 129, 0.1);  /* 翡翠绿发光晕 */
+
+  /* 磨砂玻璃卡片 (Glassmorphism) */
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-bg-hover: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --glass-border-hover: rgba(255, 255, 255, 0.15);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --glass-blur: blur(20px);
+
+  /* 文字颜色 */
+  --text-primary: #f8fafc;           /* 纯白文字 */
+  --text-secondary: #94a3b8;         /* 灰蓝色辅助文字 */
+  --text-muted: #64748b;             /* 暗灰色静音文字 */
+
+  /* 品牌与点缀色 */
+  --color-primary: #6366f1;          /* 极客紫蓝 */
+  --color-primary-glow: rgba(99, 102, 241, 0.4);
+  --color-success: #10b981;          /* 极光绿 */
+  --color-success-glow: rgba(16, 185, 129, 0.3);
+  --color-accent: #f43f5e;           /* 蔷薇粉 */
+  --color-accent-glow: rgba(244, 63, 94, 0.3);
+
+  /* 物理规范 */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --transition-fast: 0.2s ease;
+  --transition-smooth: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 亮色模式定义 (在用户系统偏好为亮色时自动切换，或者可手动配置) */
+.light-theme {
+  --bg-app: #f8fafc;
+  --bg-glow-1: rgba(99, 102, 241, 0.06);
+  --bg-glow-2: rgba(16, 185, 129, 0.04);
+
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-bg-hover: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(99, 102, 241, 0.08);
+  --glass-border-hover: rgba(99, 102, 241, 0.2);
+  --glass-shadow: 0 8px 32px 0 rgba(99, 102, 241, 0.05);
+  --glass-blur: blur(10px);
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+
+  --color-primary: #4f46e5;
+  --color-primary-glow: rgba(79, 70, 229, 0.2);
+}
