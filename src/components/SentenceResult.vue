@@ -7,6 +7,7 @@
         <span class="module-title">解析结果</span>
         
         <button 
+          v-if="showSaveBtn"
           class="favorite-btn" 
           :class="{ 'is-saved': isSaved }"
           @click="$emit('toggle-save')"
@@ -21,36 +22,10 @@
 
       <!-- 核心句子交互展示区 (单词分拆悬浮查词) -->
       <div class="sentence-interactive-box">
-        <div class="words-flow">
-          <span 
-            v-for="(word, index) in words" 
-            :key="index"
-            class="interactive-word-span"
-            :class="{ 'has-info': !!word.clean }"
-          >
-            {{ word.original }}
-            
-            <!-- 悬浮微光查词浮窗 (Tooltip Popover) -->
-            <span class="word-tooltip" v-if="word.clean && (word.explain || word.phonetic)">
-              <span class="tooltip-arrow"></span>
-              <div class="tooltip-header">
-                <span class="tooltip-word">{{ word.clean }}</span>
-                <div class="tooltip-speaker-group">
-                  <!-- 单个单词美音发音按钮 -->
-                  <button class="tooltip-speaker-btn" @click.stop="playWordAudio(word.clean, 'US')" title="美音发音">
-                    US 🔊
-                  </button>
-                  <!-- 单个单词英音发音按钮 -->
-                  <button class="tooltip-speaker-btn" @click.stop="playWordAudio(word.clean, 'UK')" title="英音发音">
-                    UK 🔊
-                  </button>
-                </div>
-              </div>
-              <span class="tooltip-phonetic" v-if="word.phonetic">{{ word.phonetic }}</span>
-              <span class="tooltip-explain">{{ word.explain || '暂无详细解释' }}</span>
-            </span>
-          </span>
-        </div>
+        <InteractiveSentence 
+          :words="words" 
+          @play-word-audio="playWordAudio"
+        />
       </div>
 
       <!-- 核心翻译展示区 -->
@@ -113,25 +88,32 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import PlayButton from './PlayButton.vue';
+import InteractiveSentence from './InteractiveSentence.vue';
 import type { WordDetail } from '../composables/useStorage';
 
 /**
  * 智能解析结果展示面板
  * 实现了单词拆解悬浮（Hover）秒级弹窗显示音标与解释的高端学习交互
  */
-const props = defineProps<{
-  sentence: string;
-  translation: string;
-  words: WordDetail[];
-  isSaved: boolean;
-  isPlaying: boolean;
-  playingAccent: 'US' | 'UK';
-  playRate: number;
-  translationProvider: string;
-  audioPlaySource: string;
-  audioPlayProvider: string;
-  dictionaryProvider: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    sentence: string;
+    translation: string;
+    words: WordDetail[];
+    isSaved: boolean;
+    isPlaying: boolean;
+    playingAccent: 'US' | 'UK';
+    playRate: number;
+    translationProvider: string;
+    audioPlaySource: string;
+    audioPlayProvider: string;
+    dictionaryProvider: string;
+    showSaveBtn?: boolean;
+  }>(),
+  {
+    showSaveBtn: true
+  }
+);
 
 const emit = defineEmits(['toggle-save', 'play-audio', 'update:playRate', 'play-word-audio']);
 

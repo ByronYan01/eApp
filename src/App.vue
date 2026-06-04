@@ -132,20 +132,96 @@
 
               <!-- 句子列表流 -->
               <div v-if="sentences.length > 0" class="repo-list">
-                <div v-for="item in sentences" :key="item.id" class="sentence-repo-card">
+                <div 
+                  v-for="item in sentences" 
+                  :key="item.id" 
+                  class="sentence-repo-card"
+                  :class="{ 'is-expanded': expandedSentenceId === item.id }"
+                >
                   <div class="repo-card-main">
                     <div class="repo-card-text selectable">{{ item.text }}</div>
                     <div class="repo-card-translation selectable">{{ item.translation }}</div>
+
+                    <!-- 智能解析展开部分 -->
+                    <Transition name="expand">
+                      <div v-if="expandedSentenceId === item.id" class="repo-card-detail">
+                        <div class="detail-divider"></div>
+                        
+                        <!-- 1. 英文原句智能解析区 (悬浮查词) -->
+                        <div class="detail-section">
+                          <h4 class="detail-title">智能解析 (单词悬浮查词)：</h4>
+                          <div class="detail-interactive-box">
+                            <InteractiveSentence 
+                              :words="item.words" 
+                              fontSize="1.3rem"
+                              @play-word-audio="handlePlayWordAudio"
+                            />
+                          </div>
+                        </div>
+
+                        <!-- 2. 整句连读音标 -->
+                        <div v-if="item.phonetics" class="detail-section">
+                          <div class="detail-phonetics">
+                            整句连读音标：<span>{{ item.phonetics }}</span>
+                          </div>
+                        </div>
+
+                        <!-- 3. 重点词汇分析列表 -->
+                        <div v-if="item.words && item.words.length > 0" class="detail-section">
+                          <h4 class="detail-title">重点词汇释义：</h4>
+                          <div class="detail-words-grid">
+                            <div 
+                              v-for="word in item.words.filter(w => w.clean && w.explain && w.explain !== '暂无单词释义' && w.explain !== '查询失败')" 
+                              :key="word.clean" 
+                              class="detail-word-chip"
+                            >
+                              <div class="chip-word-header">
+                                <span class="chip-word-name">{{ word.clean }}</span>
+                                <span class="chip-word-phonetic" v-if="word.phonetic">{{ word.phonetic }}</span>
+                                <div class="chip-word-speakers">
+                                  <button class="chip-speaker-btn" @click.stop="handlePlayWordAudio(word.clean, 'US')" title="美音发音">US 🔊</button>
+                                  <button class="chip-speaker-btn" @click.stop="handlePlayWordAudio(word.clean, 'UK')" title="英音发音">UK 🔊</button>
+                                </div>
+                              </div>
+                              <p class="chip-word-explain">{{ word.explain }}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </Transition>
+
                     <div class="repo-card-meta">
                       <span class="meta-tag" :class="item.status">
                         {{ item.status === 'learning' ? '学习中' : '已掌握' }}
                       </span>
                       <span class="meta-time">添加于: {{ formatDate(item.addedAt) }}</span>
-                      <span class="meta-count">复习次数: {{ item.reviewCount }}</span>
+                      <span class="meta-count">复戏次数: {{ item.reviewCount }}</span>
+                      
+                      <!-- 增加展开/收起文字提示按钮 -->
+                      <button 
+                        class="meta-expand-toggle-btn"
+                        @click="toggleExpandSentence(item.id)"
+                      >
+                        {{ expandedSentenceId === item.id ? '收起解析 ▲' : '查看解析详情 ▼' }}
+                      </button>
                     </div>
                   </div>
                   
                   <div class="repo-card-actions">
+                    <!-- 解析详情切换按钮 (新增) -->
+                    <button 
+                      class="action-circle-btn info"
+                      :class="{ 'active': expandedSentenceId === item.id }"
+                      @click="toggleExpandSentence(item.id)"
+                      :title="expandedSentenceId === item.id ? '收起解析' : '查看解析详情'"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        <line x1="11" y1="8" x2="11" y2="14"></line>
+                        <line x1="8" y1="11" x2="14" y2="11"></line>
+                      </svg>
+                    </button>
                     <!-- 朗读按钮 (同步首选口音、发音通道配置与发音服务商) -->
                     <button 
                       class="action-circle-btn" 
@@ -413,6 +489,7 @@ import { translateSentence, parseSentenceWords } from './services/youdao';
 import SentenceInput from './components/SentenceInput.vue';
 import SentenceResult from './components/SentenceResult.vue';
 import ReviewCard from './components/ReviewCard.vue';
+import InteractiveSentence from './components/InteractiveSentence.vue';
 
 // 页面 Tab 选项配置 (新增“系统设置”选项，配置高颜值极简 SVG)
 const tabs = [
@@ -427,6 +504,18 @@ const storage = useStorage();
 const tts = useTTS();
 
 const { sentences, loadData } = storage;
+
+// 句子仓库中当前被展开显示解析详情的句子 ID
+const expandedSentenceId = ref<string | null>(null);
+
+// 切换句子仓库中卡片的展开/收起状态
+const toggleExpandSentence = (id: string) => {
+  if (expandedSentenceId.value === id) {
+    expandedSentenceId.value = null;
+  } else {
+    expandedSentenceId.value = id;
+  }
+};
 
 // 句子智能解析过程中的响应式状态
 const parsing = ref(false);
@@ -1351,5 +1440,178 @@ input:checked + .slider:before {
 .slide-fade-leave-to {
   transform: translateY(-10px);
   opacity: 0;
+}
+
+/* ==========================================================================
+   5. 句子仓库智能解析折叠详情面板样式 (Premium Expanded Glassmorphism)
+   ========================================================================== */
+.sentence-repo-card {
+  transition: all var(--transition-normal, 0.3s) cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.sentence-repo-card.is-expanded {
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.meta-expand-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-primary, #6366f1);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  margin-left: auto;
+  transition: all var(--transition-fast, 0.2s);
+}
+
+.meta-expand-toggle-btn:hover {
+  color: white;
+  text-shadow: 0 0 8px var(--color-primary-glow, rgba(99, 102, 241, 0.4));
+}
+
+.action-circle-btn.info.active {
+  background: var(--color-primary, #6366f1);
+  color: white;
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 0 10px var(--color-primary-glow, rgba(99, 102, 241, 0.4));
+}
+
+.detail-divider {
+  height: 1px;
+  background: var(--glass-border);
+  margin: 16px 0;
+  border: none;
+}
+
+.repo-card-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 8px;
+}
+
+.detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-title {
+  font-size: 0.8rem;
+  color: var(--text-muted, #64748b);
+  font-weight: 600;
+  margin: 0;
+}
+
+.detail-interactive-box {
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  padding: 14px 18px;
+  border-radius: 8px;
+}
+
+.detail-phonetics {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.detail-phonetics span {
+  font-family: var(--font-sans);
+  color: var(--color-primary, #6366f1);
+  font-weight: 600;
+}
+
+.detail-words-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.detail-word-chip {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all var(--transition-fast, 0.2s);
+}
+
+.detail-word-chip:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.chip-word-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chip-word-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: white;
+}
+
+.chip-word-phonetic {
+  font-size: 0.75rem;
+  color: var(--color-primary, #6366f1);
+  font-family: var(--font-sans);
+}
+
+.chip-word-speakers {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.chip-speaker-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: #a78bfa;
+  font-size: 0.6rem;
+  padding: 2px 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.2s);
+}
+
+.chip-speaker-btn:hover {
+  background: var(--color-primary-glow, rgba(99, 102, 241, 0.2));
+  color: white;
+  border-color: var(--color-primary, #6366f1);
+}
+
+.chip-word-explain {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* 折叠平滑过渡动画 */
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: 1000px;
+  opacity: 1;
+  overflow: hidden;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>
