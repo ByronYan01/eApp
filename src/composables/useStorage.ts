@@ -31,6 +31,9 @@ export interface AppSettings {
   eudicToken: string;                    // 欧路词典 Personal Developer Token
   translationTimeout: number;            // 整句翻译超时时间 (ms)
   audioTimeout: number;                  // 在线发音超时时间 (ms)
+  githubToken: string;                   // GitHub Access Token
+  githubGistId: string;                  // GitHub Gist ID
+  lastSyncedAt: number;                  // 上次同步完成时间戳
 }
 
 const STORAGE_KEY = 'eapp_sentence_data';
@@ -45,7 +48,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   dictionaryProvider: 'youdao',
   eudicToken: '',
   translationTimeout: 5000,
-  audioTimeout: 5000
+  audioTimeout: 5000,
+  githubToken: '',
+  githubGistId: '',
+  lastSyncedAt: 0
 };
 
 // 艾宾浩斯复习阶段时间间隔 (单位: 分钟)

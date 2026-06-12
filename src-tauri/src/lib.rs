@@ -427,6 +427,133 @@ async fn get_online_audio_backend(text: String, accent: String, provider: String
     Err("未能从任何真人发音 API 获取到音频数据，请检查您的网络连接。".to_string())
 }
 
+// 辅助方法：生成用于 GitHub API 请求的 Client
+fn get_github_client(token: &str) -> Result<reqwest::Client, String> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    
+    let mut auth_val = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token))
+        .map_err(|e| format!("Token 格式错误: {}", e))?;
+    auth_val.set_sensitive(true);
+    headers.insert(reqwest::header::AUTHORIZATION, auth_val);
+    
+    let accept_val = reqwest::header::HeaderValue::from_static("application/vnd.github+json");
+    headers.insert(reqwest::header::ACCEPT, accept_val);
+    
+    let api_version_val = reqwest::header::HeaderValue::from_static("2022-11-28");
+    headers.insert(reqwest::header::HeaderName::from_static("x-github-api-version"), api_version_val);
+
+    reqwest::Client::builder()
+        .user_agent("eApp-Client")
+        .default_headers(headers)
+        .timeout(std::time::Duration::from_secs(10)) // 同步超时设定为 10 秒
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn github_create_gist_backend(token: String, data: String) -> Result<String, String> {
+    let client = get_github_client(&token)?;
+    
+    let body = serde_json::json!({
+        "description": "eApp English Sync Data",
+        "public": false,
+        "files": {
+            "eapp_sync_data.json": {
+                "content": data
+            }
+        }
+    });
+
+    let response = client
+        .post("https://api.github.com/gists")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("网络请求发送失败: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let err_text = response.text().await.unwrap_or_default();
+        return Err(format!("创建 Gist 失败，GitHub 返回错误 ({}): {}", status, err_text));
+    }
+
+    let json_resp: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析 GitHub 响应 JSON 失败: {}", e))?;
+
+    if let Some(gist_id) = json_resp.get("id").and_then(|v| v.as_str()) {
+        return Ok(gist_id.to_string());
+    }
+
+    Err("未从 GitHub 响应中找到有效的 Gist ID".to_string())
+}
+
+#[tauri::command]
+async fn github_read_gist_backend(token: String, gist_id: String) -> Result<String, String> {
+    let client = get_github_client(&token)?;
+    
+    let url = format!("https://api.github.com/gists/{}", gist_id);
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("网络请求发送失败: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let err_text = response.text().await.unwrap_or_default();
+        return Err(format!("读取 Gist 失败，GitHub 返回错误 ({}): {}", status, err_text));
+    }
+
+    let json_resp: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析 GitHub 响应 JSON 失败: {}", e))?;
+
+    if let Some(files) = json_resp.get("files") {
+        if let Some(file_obj) = files.get("eapp_sync_data.json") {
+            if let Some(content) = file_obj.get("content").and_then(|v| v.as_str()) {
+                return Ok(content.to_string());
+            }
+        }
+    }
+
+    Err("未在绑定的 Gist 中找到名为 eapp_sync_data.json 的备份文件。如果您是首次在另一台电脑使用，可点击强制推送以初始化该文件。".to_string())
+}
+
+#[tauri::command]
+async fn github_write_gist_backend(token: String, gist_id: String, data: String) -> Result<String, String> {
+    let client = get_github_client(&token)?;
+    
+    let url = format!("https://api.github.com/gists/{}", gist_id);
+    
+    let body = serde_json::json!({
+        "description": "eApp English Sync Data (Updated)",
+        "files": {
+            "eapp_sync_data.json": {
+                "content": data
+            }
+        }
+    });
+
+    let response = client
+        .patch(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("网络请求发送失败: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let err_text = response.text().await.unwrap_or_default();
+        return Err(format!("写入 Gist 失败，GitHub 返回错误 ({}): {}", status, err_text));
+    }
+
+    Ok("数据已成功推送到云端！".to_string())
+}
+
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -437,7 +564,10 @@ pub fn run() {
             translate_sentence_backend,
             get_word_detail_backend,
             get_phonetic_from_dict_backend,
-            get_online_audio_backend
+            get_online_audio_backend,
+            github_create_gist_backend,
+            github_read_gist_backend,
+            github_write_gist_backend
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

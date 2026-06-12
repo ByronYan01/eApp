@@ -319,6 +319,14 @@
                     </button>
                     <button 
                       class="sidebar-tab-btn" 
+                      :class="{ 'active': activeSettingsTab === 'sync' }"
+                      @click="activeSettingsTab = 'sync'"
+                    >
+                      <span class="sidebar-tab-icon">🔄</span>
+                      <span class="sidebar-tab-text">数据同步</span>
+                    </button>
+                    <button 
+                      class="sidebar-tab-btn" 
                       :class="{ 'active': activeSettingsTab === 'about' }"
                       @click="activeSettingsTab = 'about'"
                     >
@@ -614,6 +622,142 @@
                                   </div>
                                 </div>
                               </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 5. 跨设备数据同步 panel -->
+                      <div v-else-if="activeSettingsTab === 'sync'" class="settings-tab-panel" key="sync">
+                        <div class="settings-card-compact">
+                          <div class="settings-group">
+                            <h3>GitHub Gist 云端数据同步</h3>
+                            <p class="group-desc">利用个人 GitHub 私有 Gist 安全同步句子仓库及艾宾浩斯复习进度。</p>
+
+                            <!-- 使用指引折叠开关 -->
+                            <div 
+                              class="sync-guide-toggle" 
+                              @click="showSyncGuide = !showSyncGuide"
+                              style="cursor:pointer; color: var(--color-primary); font-size: 0.82rem; display: flex; align-items: center; gap: 6px; margin: 8px 0 16px 0; font-weight: 600; width: max-content; transition: color var(--transition-fast);"
+                            >
+                              <span>❓ 首次使用？查看极简配置指引</span>
+                              <svg 
+                                viewBox="0 0 24 24" 
+                                fill="none" 
+                                stroke="currentColor" 
+                                stroke-width="2" 
+                                style="width: 14px; height: 14px; transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);"
+                                :style="{ transform: showSyncGuide ? 'rotate(90deg)' : 'none' }"
+                              >
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                              </svg>
+                            </div>
+
+                            <!-- 指引折叠内容区 -->
+                            <Transition name="expand">
+                              <div v-if="showSyncGuide" class="sync-guide-content" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); padding: 16px; border-radius: var(--radius-md); font-size: 0.8rem; line-height: 1.6; color: var(--text-secondary); margin-bottom: 20px;">
+                                <ol style="padding-left: 16px; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+                                  <li>
+                                    <strong>获取 Token</strong>：进入 <a href="https://github.com/settings/tokens" target="_blank" class="text-link" style="font-weight:600; color: var(--color-primary); text-decoration: underline;">GitHub Access Token 申请页</a>，点击 Generate new token (classic)，设定备注与 No expiration（永不过期），<strong>仅勾选 gist 权限</strong>生成，复制得到的长字符串 Token。
+                                  </li>
+                                  <li>
+                                    <strong>填入 Token</strong>：将复制 the Token 粘贴至下方 <strong>GitHub Access Token (PAT)</strong> 输入框中。
+                                  </li>
+                                  <li>
+                                    <strong>绑定备份文件 (首次使用)</strong>：保持 Gist ID 留空，点击 **“自动创建 Gist”** 按钮。系统会在您的 GitHub 云端自动生成一个专属的私有备份文件，并回填生成的 Gist ID。
+                                  </li>
+                                  <li>
+                                    <strong>多端同步 (新电脑)</strong>：在您的其他电脑上，填入相同的 Token 与 Gist ID，点击 **“立即智能同步”** 即可读取并无损融合所有电脑的学习进度！
+                                  </li>
+                                </ol>
+                              </div>
+                            </Transition>
+                            
+                            <!-- Token 输入 -->
+                            <div class="setting-item flex-column">
+                              <div class="setting-header">
+                                <span class="setting-label">GitHub Access Token (PAT)</span>
+                              </div>
+                              <input 
+                                type="password" 
+                                class="token-input animate-fade-in" 
+                                :value="storage.settings.value.githubToken"
+                                @input="e => updateSetting('githubToken', (e.target as HTMLInputElement).value.trim())"
+                                placeholder="请输入您的 GitHub Access Token (需勾选 gist 读写权限)"
+                              />
+                              <p class="setting-hint font-small">
+                                请提供一个具有 <strong>gist</strong> 读写授权的 Personal Access Token。您可以在 GitHub 的 Settings -> Developer settings 中进行申请。
+                              </p>
+                            </div>
+
+                            <!-- Gist ID 输入 -->
+                            <div class="setting-item flex-column">
+                              <div class="setting-header">
+                                <span class="setting-label">Gist ID (同步标识)</span>
+                              </div>
+                              <div class="gist-id-row" style="display:flex; width:100%; gap:12px;">
+                                <input 
+                                  type="text" 
+                                  class="token-input animate-fade-in" 
+                                  style="flex: 1;"
+                                  :value="storage.settings.value.githubGistId"
+                                  @input="e => updateSetting('githubGistId', (e.target as HTMLInputElement).value.trim())"
+                                  placeholder="留空可点击右侧按钮在云端自动新建并绑定"
+                                />
+                                <button 
+                                  class="test-btn" 
+                                  style="padding: 10px 16px; font-size: 0.82rem; border-radius: var(--radius-md); background: var(--color-primary); color: white; border: none; cursor: pointer; display: flex; align-items: center; gap: 4px;"
+                                  :disabled="!storage.settings.value.githubToken || creatingGist" 
+                                  @click="handleCreateGist"
+                                >
+                                  <span v-if="!creatingGist">🆕 自动创建 Gist</span>
+                                  <span v-else>⏳ 正在创建中...</span>
+                                </button>
+                              </div>
+                              <p class="setting-hint font-small">
+                                云端数据备份的唯一标识。如果在其他电脑上已经同步过，直接将对应的 Gist ID 粘贴在上方即可读取进度。
+                              </p>
+                            </div>
+
+                            <!-- 云端同步状态与立即同步 -->
+                            <div class="setting-item" style="padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                              <div>
+                                <span class="setting-label">云端同步状态</span>
+                                <p class="setting-hint font-small" style="margin-top: 4px;">
+                                  上次同步时间：{{ storage.settings.value.lastSyncedAt ? new Date(storage.settings.value.lastSyncedAt).toLocaleString() : '从未同步过进度' }}
+                                </p>
+                              </div>
+                              <div class="sync-actions">
+                                <button 
+                                  class="test-btn" 
+                                  style="padding: 10px 20px; font-size: 0.88rem; border-radius: 99px; background: var(--color-primary); color: white; border: none; cursor: pointer;"
+                                  :disabled="!storage.settings.value.githubToken || !storage.settings.value.githubGistId || syncing" 
+                                  @click="handleSyncData"
+                                >
+                                  <span v-if="!syncing">🔄 立即智能同步</span>
+                                  <span v-else>⏳ 正在同步...</span>
+                                </button>
+                              </div>
+                            </div>
+                            
+                            <!-- 强制覆盖操作 -->
+                            <div class="sync-advanced-actions" v-if="storage.settings.value.githubGistId" style="display:flex; gap:12px; margin-top: 12px; justify-content: flex-end; width:100%;">
+                              <button 
+                                class="chip-speaker-btn" 
+                                style="font-size:0.75rem; padding: 6px 12px; border-radius: 6px;"
+                                :disabled="syncing"
+                                @click="handleForcePush"
+                              >
+                                ⬆️ 强制用本地覆盖云端
+                              </button>
+                              <button 
+                                class="chip-speaker-btn" 
+                                style="font-size:0.75rem; padding: 6px 12px; border-radius: 6px;"
+                                :disabled="syncing"
+                                @click="handleForcePull"
+                              >
+                                ⬇️ 强制用云端覆盖本地
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1008,9 +1152,186 @@ const resetToDefaultSettings = () => {
     dictionaryProvider: 'youdao',
     eudicToken: '',
     translationTimeout: 5000,
-    audioTimeout: 5000
+    audioTimeout: 5000,
+    githubToken: '',
+    githubGistId: '',
+    lastSyncedAt: 0
   };
   storage.saveSettings(DEFAULT_SETTINGS);
+};
+
+// ==================== GitHub Gist 跨设备数据同步逻辑 ====================
+const creatingGist = ref(false);
+const syncing = ref(false);
+const showSyncGuide = ref(false);
+
+// 自动在云端创建私人 Gist 并绑定
+const handleCreateGist = async () => {
+  const token = storage.settings.value.githubToken.trim();
+  if (!token) {
+    alert('⚠️ 请先输入具有 gist 读写授权的 GitHub Access Token (PAT)！');
+    return;
+  }
+
+  creatingGist.value = true;
+  try {
+    // 上传本地当前最新的句子列表作为初始数据
+    const localDataStr = JSON.stringify(storage.sentences.value);
+    const gistId = await invoke<string>('github_create_gist_backend', {
+      token,
+      data: localDataStr
+    });
+
+    updateSetting('githubGistId', gistId);
+    updateSetting('lastSyncedAt', Date.now());
+    alert(`🎉 云端私人同步文件创建并绑定成功！\n\nGist ID：${gistId}\n\n提醒：后续在其他电脑上使用本软件，只需在同步界面贴入 Access Token 和上述 Gist ID，即可双端进度无缝融合。`);
+  } catch (e) {
+    console.error('自动创建 Gist 失败:', e);
+    alert(`❌ 自动创建 Gist 失败:\n${e}`);
+  } finally {
+    creatingGist.value = false;
+  }
+};
+
+// 立即智能同步（增量无损合并）
+const handleSyncData = async () => {
+  const token = storage.settings.value.githubToken.trim();
+  const gistId = storage.settings.value.githubGistId.trim();
+  if (!token || !gistId) {
+    alert('⚠️ 请先配置完整的 GitHub Access Token 与 Gist ID！');
+    return;
+  }
+
+  syncing.value = true;
+  try {
+    // 1. 读取云端同步的数据
+    const cloudDataStr = await invoke<string>('github_read_gist_backend', {
+      token,
+      gistId
+    });
+
+    let cloudSentences: any[] = [];
+    try {
+      cloudSentences = JSON.parse(cloudDataStr);
+    } catch (parseErr) {
+      console.warn('云端备份解析失败，可能文件为空，将自动以本地为主进行覆盖', parseErr);
+    }
+
+    // 2. 双端数据智能无损合并
+    const mergedMap = new Map<string, any>();
+
+    // 先塞入本地数据
+    storage.sentences.value.forEach(s => {
+      mergedMap.set(s.id, { ...s });
+    });
+
+    let cloudAddedCount = 0;
+    let localUpdatedCount = 0;
+
+    // 循环对比云端数据
+    cloudSentences.forEach(cloudItem => {
+      const localItem = mergedMap.get(cloudItem.id);
+      if (!localItem) {
+        // 本地没有，云端有：直接拉下来
+        mergedMap.set(cloudItem.id, cloudItem);
+        cloudAddedCount++;
+      } else {
+        // 本地和云端都有：对比复习次数 (reviewCount) 选择最先进的那个版本，防止进度倒退
+        const cloudCount = cloudItem.reviewCount || 0;
+        const localCount = localItem.reviewCount || 0;
+        if (cloudCount > localCount) {
+          mergedMap.set(cloudItem.id, cloudItem);
+          localUpdatedCount++;
+        }
+      }
+    });
+
+    const mergedList = Array.from(mergedMap.values());
+
+    // 3. 将合并后的最终数据写回云端和本地
+    const mergedDataStr = JSON.stringify(mergedList);
+    await invoke('github_write_gist_backend', {
+      token,
+      gistId,
+      data: mergedDataStr
+    });
+
+    // 覆盖本地
+    storage.sentences.value = mergedList;
+    localStorage.setItem('eapp_sentence_data', mergedDataStr);
+
+    updateSetting('lastSyncedAt', Date.now());
+    alert(`🎉 云端数据智能同步成功！\n\n- 从云端增量合并了 ${cloudAddedCount} 个新句子\n- 根据云端进度更新了 ${localUpdatedCount} 个单词复习记录`);
+  } catch (e) {
+    console.error('智能同步失败:', e);
+    alert(`❌ 同步失败:\n${e}`);
+  } finally {
+    syncing.value = false;
+  }
+};
+
+// 强制本地覆盖云端
+const handleForcePush = async () => {
+  const token = storage.settings.value.githubToken.trim();
+  const gistId = storage.settings.value.githubGistId.trim();
+  if (!token || !gistId) {
+    alert('⚠️ 请先配置完整的 GitHub Access Token 与 Gist ID！');
+    return;
+  }
+
+  if (!confirm('⚠️ 警告：您确定要强制使用【本地句子库】覆盖【云端备份】吗？\n此操作将直接擦除云端中所有不同的数据记录！')) {
+    return;
+  }
+
+  syncing.value = true;
+  try {
+    const localDataStr = JSON.stringify(storage.sentences.value);
+    await invoke('github_write_gist_backend', {
+      token,
+      gistId,
+      data: localDataStr
+    });
+    updateSetting('lastSyncedAt', Date.now());
+    alert('🎉 本地数据已强制推送并覆盖云端备份！');
+  } catch (e) {
+    console.error('强制推送失败:', e);
+    alert(`❌ 推送失败:\n${e}`);
+  } finally {
+    syncing.value = false;
+  }
+};
+
+// 强制云端覆盖本地
+const handleForcePull = async () => {
+  const token = storage.settings.value.githubToken.trim();
+  const gistId = storage.settings.value.githubGistId.trim();
+  if (!token || !gistId) {
+    alert('⚠️ 请先配置完整的 GitHub Access Token 与 Gist ID！');
+    return;
+  }
+
+  if (!confirm('⚠️ 警告：您确定要强制使用【云端备份】覆盖【本地句子库】吗？\n此操作将直接擦除您本地所有未同步的学习记录，且无法撤销！')) {
+    return;
+  }
+
+  syncing.value = true;
+  try {
+    const cloudDataStr = await invoke<string>('github_read_gist_backend', {
+      token,
+      gistId
+    });
+
+    const cloudSentences = JSON.parse(cloudDataStr);
+    storage.sentences.value = cloudSentences;
+    localStorage.setItem('eapp_sentence_data', cloudDataStr);
+    updateSetting('lastSyncedAt', Date.now());
+    alert('🎉 已强制从云端覆盖并更新本地句子库！');
+  } catch (e) {
+    console.error('强制拉取失败:', e);
+    alert(`❌ 拉取失败:\n${e}`);
+  } finally {
+    syncing.value = false;
+  }
 };
 
 // ==================== 接口测速与最佳配置逻辑 ====================
@@ -1703,9 +2024,8 @@ onMounted(() => {
 }
 
 .sidebar-tab-btn:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text-primary);
-  transform: translateX(4px);
 }
 
 .sidebar-tab-btn.active {
