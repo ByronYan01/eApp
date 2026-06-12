@@ -37,10 +37,11 @@ struct YoudaoJsonapiResponse {
     ec: Option<EcData>,
 }
 
-// 辅助方法：生成带有通用浏览器 User-Agent 的 HTTP 客户端以避免被拦截
-fn get_http_client() -> Result<reqwest::Client, String> {
+// 辅助方法：生成带有通用浏览器 User-Agent 的 HTTP 客户端以避免被拦截，支持传入超时时间 (毫秒)
+fn get_http_client(timeout_ms: u64) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_millis(timeout_ms))
         .build()
         .map_err(|e| e.to_string())
 }
@@ -50,123 +51,193 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
-// 1. 整句翻译后端代理命令 (支持谷歌、有道、百度三种公开免签划词接口切换)
-#[tauri::command]
-async fn translate_sentence_backend(sentence: String, provider: String) -> Result<String, String> {
-    let client = get_http_client()?;
-    
-    if provider == "youdao" {
-        // 有道翻译网页公开免签接口
-        let response = client
-            .get("https://fanyi.youdao.com/translate")
-            .query(&[("doctype", "json"), ("type", "AUTO"), ("i", sentence.as_str())])
-            .send()
-            .await
-            .map_err(|e| format!("有道网络请求发送失败: {}", e))?;
+// 谷歌翻译公开免签接口请求辅助函数
+async fn translate_by_google(client: &reqwest::Client, sentence: &str) -> Result<String, String> {
+    let response = client
+        .get("https://translate.googleapis.com/translate_a/single")
+        .query(&[
+            ("client", "gtx"),
+            ("sl", "auto"),
+            ("tl", "zh-CN"),
+            ("dt", "t"),
+            ("q", sentence),
+        ])
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
 
-        if !response.status().is_success() {
-            return Err(format!("有道接口响应状态错误: {}", response.status()));
-        }
+    if !response.status().is_success() {
+        return Err(format!("接口响应状态错误: {}", response.status()));
+    }
 
-        let data: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| format!("解析有道响应JSON失败: {}", e))?;
+    let data: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析 JSON 失败: {}", e))?;
 
-        if let Some(outer_list) = data.get("translateResult").and_then(|v| v.as_array()) {
-            if let Some(inner_list) = outer_list.first().and_then(|v| v.as_array()) {
-                let mut translated_parts = Vec::new();
-                for item in inner_list {
-                    if let Some(tgt) = item.get("tgt").and_then(|v| v.as_str()) {
-                        translated_parts.push(tgt.to_string());
-                    }
-                }
-                if !translated_parts.is_empty() {
-                    return Ok(translated_parts.join(""));
-                }
-            }
-        }
-        Err("有道未返回有效的翻译结果".to_string())
-    } else if provider == "baidu" {
-        // 百度翻译网页公开免签划词接口
-        let response = client
-            .get("https://fanyi.baidu.com/transapi")
-            .query(&[
-                ("from", "auto"),
-                ("to", "zh"),
-                ("query", sentence.as_str()),
-            ])
-            .send()
-            .await
-            .map_err(|e| format!("百度网络请求发送失败: {}", e))?;
-
-        if !response.status().is_success() {
-            return Err(format!("百度接口响应状态错误: {}", response.status()));
-        }
-
-        let data: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| format!("解析百度响应JSON失败: {}", e))?;
-
-        if let Some(data_list) = data.get("data").and_then(|v| v.as_array()) {
+    if let Some(outer_list) = data.as_array() {
+        if let Some(sentences_list) = outer_list.first().and_then(|v| v.as_array()) {
             let mut translated_parts = Vec::new();
-            for item in data_list {
-                if let Some(dst) = item.get("dst").and_then(|v| v.as_str()) {
-                    translated_parts.push(dst.to_string());
+            for item in sentences_list {
+                if let Some(translated_text) = item.as_array().and_then(|arr| arr.first()).and_then(|v| v.as_str()) {
+                    translated_parts.push(translated_text.to_string());
                 }
             }
             if !translated_parts.is_empty() {
                 return Ok(translated_parts.join(""));
             }
         }
-        Err("百度未返回有效的翻译结果".to_string())
-    } else {
-        // 默认采用谷歌免签高稳定划词接口
-        let response = client
-            .get("https://translate.googleapis.com/translate_a/single")
-            .query(&[
-                ("client", "gtx"),
-                ("sl", "auto"),
-                ("tl", "zh-CN"),
-                ("dt", "t"),
-                ("q", sentence.as_str()),
-            ])
-            .send()
-            .await
-            .map_err(|e| format!("谷歌网络请求发送失败: {}", e))?;
+    }
+    Err("未获取到有效的翻译文本".to_string())
+}
 
-        if !response.status().is_success() {
-            return Err(format!("谷歌接口响应状态错误: {}", response.status()));
-        }
+// 有道翻译公开免签接口请求辅助函数
+async fn translate_by_youdao(client: &reqwest::Client, sentence: &str) -> Result<String, String> {
+    let response = client
+        .get("https://fanyi.youdao.com/translate")
+        .query(&[("doctype", "json"), ("type", "AUTO"), ("i", sentence)])
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
 
-        let data: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| format!("解析谷歌响应JSON失败: {}", e))?;
+    if !response.status().is_success() {
+        return Err(format!("接口响应状态错误: {}", response.status()));
+    }
 
-        if let Some(outer_list) = data.as_array() {
-            if let Some(sentences_list) = outer_list.first().and_then(|v| v.as_array()) {
-                let mut translated_parts = Vec::new();
-                for item in sentences_list {
-                    if let Some(translated_text) = item.as_array().and_then(|arr| arr.first()).and_then(|v| v.as_str()) {
-                        translated_parts.push(translated_text.to_string());
-                    }
-                }
-                if !translated_parts.is_empty() {
-                    return Ok(translated_parts.join(""));
+    let data: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析 JSON 失败: {}", e))?;
+
+    if let Some(outer_list) = data.get("translateResult").and_then(|v| v.as_array()) {
+        if let Some(inner_list) = outer_list.first().and_then(|v| v.as_array()) {
+            let mut translated_parts = Vec::new();
+            for item in inner_list {
+                if let Some(tgt) = item.get("tgt").and_then(|v| v.as_str()) {
+                    translated_parts.push(tgt.to_string());
                 }
             }
+            if !translated_parts.is_empty() {
+                return Ok(translated_parts.join(""));
+            }
         }
-        Err("谷歌未获取到有效的翻译结果".to_string())
     }
+    Err("未返回有效的翻译文本".to_string())
+}
+
+// 百度翻译公开免签划词接口请求辅助函数
+async fn translate_by_baidu(client: &reqwest::Client, sentence: &str) -> Result<String, String> {
+    let response = client
+        .get("https://fanyi.baidu.com/transapi")
+        .query(&[
+            ("from", "auto"),
+            ("to", "zh"),
+            ("query", sentence),
+        ])
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("接口响应状态错误: {}", response.status()));
+    }
+
+    let data: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析 JSON 失败: {}", e))?;
+
+    if let Some(data_list) = data.get("data").and_then(|v| v.as_array()) {
+        let mut translated_parts = Vec::new();
+        for item in data_list {
+            if let Some(dst) = item.get("dst").and_then(|v| v.as_str()) {
+                translated_parts.push(dst.to_string());
+            }
+        }
+        if !translated_parts.is_empty() {
+            return Ok(translated_parts.join(""));
+        }
+    }
+    Err("未返回有效的翻译文本".to_string())
+}
+
+// MyMemory 翻译接口请求辅助函数
+async fn translate_by_mymemory(client: &reqwest::Client, sentence: &str) -> Result<String, String> {
+    let response = client
+        .get("https://api.mymemory.translated.net/get")
+        .query(&[
+            ("q", sentence),
+            ("langpair", "en|zh"),
+        ])
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("接口响应状态错误: {}", response.status()));
+    }
+
+    let data: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析 JSON 失败: {}", e))?;
+
+    if let Some(res_data) = data.get("responseData") {
+        if let Some(translated_text) = res_data.get("translatedText").and_then(|v| v.as_str()) {
+            return Ok(translated_text.to_string());
+        }
+    }
+    
+    Err("未获取到有效的翻译文本".to_string())
+}
+
+// 1. 整句翻译后端代理命令 (支持谷歌、有道、百度、mymemory 四种公开免签划词接口切换与级联防超时兜底)
+#[tauri::command]
+async fn translate_sentence_backend(sentence: String, provider: String, timeout_ms: Option<u64>) -> Result<String, String> {
+    let timeout = timeout_ms.unwrap_or(5000);
+    let client = get_http_client(timeout)?;
+    
+    // 动态编排翻译引擎的尝试顺序。用户指定的引擎首选使用，其余引擎依序兜底。
+    let mut order = vec!["mymemory", "youdao", "baidu", "google"];
+    if provider == "google" {
+        order = vec!["google", "mymemory", "youdao", "baidu"];
+    } else if provider == "baidu" {
+        order = vec!["baidu", "mymemory", "youdao", "google"];
+    } else if provider == "youdao" {
+        order = vec!["youdao", "mymemory", "baidu", "google"];
+    } else if provider == "mymemory" {
+        order = vec!["mymemory", "youdao", "baidu", "google"];
+    } else if provider == "auto" {
+        order = vec!["mymemory", "youdao", "baidu", "google"]; // 智能兜底默认先试最稳的 MyMemory
+    }
+    
+    let mut errors = Vec::new();
+    
+    for engine in order {
+        let result = match engine {
+            "google" => translate_by_google(&client, &sentence).await,
+            "youdao" => translate_by_youdao(&client, &sentence).await,
+            "baidu" => translate_by_baidu(&client, &sentence).await,
+            "mymemory" => translate_by_mymemory(&client, &sentence).await,
+            _ => Err("未知引擎".to_string()),
+        };
+        
+        match result {
+            Ok(trans) => return Ok(trans),
+            Err(e) => {
+                errors.push(format!("{}: {}", engine, e));
+            }
+        }
+    }
+    
+    Err(format!("未能从任何翻译 API 获取到翻译数据，请检查网络连接。详情：\n{}", errors.join("\n")))
 }
 
 
 // 2. 单词释义与音标后端代理命令 (整合了联想和音标接口)
 #[tauri::command]
 async fn get_word_detail_backend(word: String) -> Result<serde_json::Value, String> {
-    let client = get_http_client()?;
+    let client = get_http_client(5000)?;
     
     let response = client
         .get("https://dict.youdao.com/suggest")
@@ -212,7 +283,7 @@ async fn get_word_detail_backend(word: String) -> Result<serde_json::Value, Stri
 
 // 辅助方法：获取单词的所有音标类型（美音、英音、通用音标）
 async fn get_all_phonetics_backend(word: String) -> (String, String, String) {
-    match get_http_client() {
+    match get_http_client(5000) {
         Ok(client) => {
             let response = client
                 .get("https://dict.youdao.com/jsonapi")
@@ -264,8 +335,9 @@ async fn get_phonetic_from_dict_backend(word: String) -> Result<String, String> 
 
 // 4. 多级级联在线真人原声 TTS 代理命令 (支持有道、谷歌、百度发音的动态主次切换与无缝故障兜底)
 #[tauri::command]
-async fn get_online_audio_backend(text: String, accent: String, provider: String) -> Result<String, String> {
-    let client = get_http_client()?;
+async fn get_online_audio_backend(text: String, accent: String, provider: String, timeout_ms: Option<u64>) -> Result<String, String> {
+    let timeout = timeout_ms.unwrap_or(5000);
+    let client = get_http_client(timeout)?;
     
     // 首选口音类型，有道 2 为美音，1 为英音
     let youdao_type = if accent == "US" { "2" } else { "1" };
@@ -359,6 +431,7 @@ async fn get_online_audio_backend(text: String, accent: String, provider: String
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             greet,
             translate_sentence_backend,

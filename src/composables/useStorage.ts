@@ -25,10 +25,12 @@ export interface AppSettings {
   phoneticAccent: 'US' | 'UK';           // 首选音标口音：US(美音) | UK(英音)
   allowPhoneticFallback: boolean;        // 是否允许音标降级 (true: 允许, false: 不允许)
   audioPlaySource: 'local' | 'online';    // 发音音频源：local(系统本地TTS) | online(在线真人原声)
-  translationProvider: 'google' | 'youdao' | 'baidu'; // 翻译引擎提供商：google | youdao | baidu
+  translationProvider: 'auto' | 'google' | 'youdao' | 'baidu' | 'mymemory'; // 翻译引擎提供商：auto | google | youdao | baidu | mymemory
   audioPlayProvider: 'auto' | 'youdao' | 'google' | 'baidu'; // 在线发音引擎提供商：auto | youdao | google | baidu
   dictionaryProvider: 'youdao' | 'eudic'; // 单词音标与释义提供商：youdao | eudic
   eudicToken: string;                    // 欧路词典 Personal Developer Token
+  translationTimeout: number;            // 整句翻译超时时间 (ms)
+  audioTimeout: number;                  // 在线发音超时时间 (ms)
 }
 
 const STORAGE_KEY = 'eapp_sentence_data';
@@ -38,10 +40,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   phoneticAccent: 'US',
   allowPhoneticFallback: true,
   audioPlaySource: 'local',
-  translationProvider: 'google',
+  translationProvider: 'auto',
   audioPlayProvider: 'auto',
   dictionaryProvider: 'youdao',
-  eudicToken: ''
+  eudicToken: '',
+  translationTimeout: 5000,
+  audioTimeout: 5000
 };
 
 // 艾宾浩斯复习阶段时间间隔 (单位: 分钟)

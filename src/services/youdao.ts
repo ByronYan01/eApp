@@ -15,12 +15,13 @@ function cleanWord(word: string): string {
 /**
  * 1. 整句翻译服务 (调用 Rust 后端代理)
  */
-export async function translateSentence(sentence: string, provider: string = 'google'): Promise<string> {
+export async function translateSentence(sentence: string, provider: string = 'google', timeoutMs: number = 5000): Promise<string> {
   try {
-    // 调用 Rust 端已注册的 translate_sentence_backend 命令并传递翻译服务商
+    // 调用 Rust 端已注册的 translate_sentence_backend 命令并传递翻译服务商及超时参数
     const result = await invoke<string>('translate_sentence_backend', { 
       sentence: sentence.trim(),
-      provider
+      provider,
+      timeoutMs
     });
     return result;
   } catch (error) {

@@ -1,61 +1,49 @@
 <template>
   <div class="review-panel-card animate-fade-in">
-    <!-- A. 盲听测试区域 (常驻顶部，大方美观) -->
+    <!-- A. 状态页眉 -->
     <div class="test-header">
       <span class="status-badge" :class="{ 'revealed': isAnswerRevealed }">
-        {{ isAnswerRevealed ? 'ANSWER · 核心释义' : 'RECALLING · 盲测尝试回想' }}
+        {{ isAnswerRevealed ? 'ANSWER · 智能解析已揭晓' : 'RECALLING · 英文原声盲听中' }}
       </span>
       <span class="step-badge">艾宾浩斯阶段 {{ item.reviewCount }}</span>
     </div>
 
-    <div class="test-body">
-      <!-- 英文整句模糊指示标签 (新增，极具现代指引性) -->
-      <span class="blur-tip-label animate-fade-in" v-if="!isTextRevealed && !isAnswerRevealed">
-        🔒 英文整句已施加模糊遮罩 · 点击句子可临时显形
-      </span>
-      <span class="blur-tip-label success animate-pulse" v-else-if="isTextRevealed && !isAnswerRevealed">
-        🔓 临时显形中 · 再次点击可重新施加模糊
-      </span>
-      <span class="blur-tip-label success animate-fade-in" v-else>
-        🔓 解析已揭晓 · 句子已完全显示
-      </span>
-
-      <!-- 英文大字号句子展示 (增加 class 绑定与点击临时显形，防止事件冒泡) -->
-      <h2 
-        class="english-text selectable" 
-        :class="{ 'is-blurred': !isTextRevealed && !isAnswerRevealed }"
-        @click.stop="isTextRevealed = !isTextRevealed"
-        title="点击临时显示/隐藏英文原句"
-      >
-        {{ item.text }}
-      </h2>
+    <!-- B. 盲听测试阶段 (未揭晓答案时展示) -->
+    <div v-if="!isAnswerRevealed" class="test-body-listening animate-fade-in">
+      <div class="listening-icon-wrapper">
+        <!-- 环形呼吸雷达声波波纹柱 -->
+        <div class="audio-waves">
+          <span class="wave w1"></span>
+          <span class="wave w2"></span>
+          <span class="wave w3"></span>
+        </div>
+        <span class="ear-icon">🎧</span>
+      </div>
+      <p class="listening-tip">正在播放英文原声，请仔细辨音并回想整句含义...</p>
       
-      <!-- 听力盲测播放组 -->
+      <!-- 盲听模式音频操作组 -->
       <div class="audio-control-row">
         <button class="audio-accent-btn" @click="playTTS(item.text, 'US')" title="播放美式发音">
-          <span class="speaker-icon">🔊</span> US 美音
+          <span class="speaker-icon">🔊</span> US 美音再次播放
         </button>
         <button class="audio-accent-btn uk" @click="playTTS(item.text, 'UK')" title="播放英式发音">
-          <span class="speaker-icon">🔊</span> UK 英音
+          <span class="speaker-icon">🔊</span> UK 英音再次播放
+        </button>
+      </div>
+
+      <!-- 揭晓解析触发按钮 -->
+      <div class="reveal-action-box">
+        <button class="reveal-trigger-btn" @click="revealAnswer">
+          <span class="reveal-trigger-icon">🔑</span>
+          看原句与智能解析结果
+          <span class="btn-shortcut-pill">Space</span>
         </button>
       </div>
     </div>
 
-    <!-- B. 未揭晓时：显示大大的毛玻璃渐变发光“揭晓”按钮 -->
-    <div v-if="!isAnswerRevealed" class="reveal-action-box">
-      <button class="reveal-trigger-btn" @click="revealAnswer">
-        <span class="reveal-trigger-icon">🔑</span>
-        揭晓答案与智能解析
-        <span class="btn-shortcut-pill">Space</span>
-      </button>
-    </div>
-
-    <!-- C. 已揭晓时：渐进式淡入平铺展开 SentenceResult 和 评分条 -->
+    <!-- C. 详情揭晓阶段 (已揭晓答案时展示) -->
     <div v-else class="revealed-details-container animate-slide-up">
-      <!-- 分割线 -->
-      <div class="detail-divider"></div>
-
-      <!-- 嵌入完整的 SentenceResult 解析详情卡片 (隐藏收藏按钮，保留整句朗读、语速调节、单词Hover与Badges) -->
+      <!-- 嵌入完整的 SentenceResult 解析详情卡片 (隐藏收藏按钮，集成朗读、倍速、单词Hover与Badges) -->
       <SentenceResult
         :sentence="item.text"
         :translation="item.translation"
@@ -79,8 +67,8 @@
       <!-- 底部快捷评分栏与返回正面按钮 -->
       <div class="review-actions-footer">
         <!-- 返回正面按钮 -->
-        <button class="back-to-test-btn" @click="resetToTest" title="返回盲测界面">
-          ↩ 返回盲测
+        <button class="back-to-test-btn" @click="resetToTest" title="返回盲听界面">
+          ↩ 返回盲听
         </button>
 
         <!-- 评分动作按钮组 -->
@@ -126,45 +114,40 @@ const emit = defineEmits<{
 }>();
 
 const isAnswerRevealed = ref(false);
-const isTextRevealed = ref(false); // 新增：控制原句是否显形 (默认高斯模糊遮蔽)
 const tts = useTTS();
 const storage = useStorage();
 
 // 加载配置
 storage.loadSettings();
 
-// 揭晓答案并自动显形
+// 揭晓答案并展现详情
 const revealAnswer = () => {
   isAnswerRevealed.value = true;
-  isTextRevealed.value = true;
 };
 
 // 返回盲听测试界面
 const resetToTest = () => {
   isAnswerRevealed.value = false;
-  isTextRevealed.value = false;
 };
 
 // 进行艾宾浩斯复习评分判定
 const handleRate = (remembered: boolean) => {
   emit('remember', props.item.id, remembered);
   isAnswerRevealed.value = false;
-  isTextRevealed.value = false;
 };
 
-// 朗读整句句子
+// 朗读整句
 const playTTS = (text: string, accent: 'US' | 'UK') => {
-  tts.play(text, accent, tts.playRate.value, storage.settings.value.audioPlaySource, storage.settings.value.audioPlayProvider);
+  tts.play(text, accent, tts.playRate.value, storage.settings.value.audioPlaySource, storage.settings.value.audioPlayProvider, storage.settings.value.audioTimeout);
 };
 
-// 朗读单个单词 (同样采用 1.0x 标准语速与全局发音服务商)
+// 朗读单个单词 (遵循用户全局设置的语速与全局发音服务商)
 const playWordTTS = (word: string, accent: 'US' | 'UK') => {
-  tts.play(word, accent, 1.0, storage.settings.value.audioPlaySource, storage.settings.value.audioPlayProvider);
+  tts.play(word, accent, tts.playRate.value, storage.settings.value.audioPlaySource, storage.settings.value.audioPlayProvider, storage.settings.value.audioTimeout);
 };
 
-// 全局键盘快捷键响应 (Space 揭晓答案/返回，1 和 2 快速数字键评分，实现神级流畅度)
+// 全局键盘快捷键响应 (Space 揭晓答案/返回，1 和 2 快速数字键评分)
 const handleKeyDown = (e: KeyboardEvent) => {
-  // 严密防冲突：若当前焦点在任何输入框中，不拦截快捷键
   const activeEl = document.activeElement;
   if (activeEl && (
     activeEl.tagName === 'INPUT' || 
@@ -197,7 +180,6 @@ const handleKeyDown = (e: KeyboardEvent) => {
 // 监听卡片项切换，重置面板并自动播放新句子音频进行发音盲听预热
 watch(() => props.item.id, () => {
   isAnswerRevealed.value = false;
-  isTextRevealed.value = false;
   setTimeout(() => {
     playTTS(props.item.text, storage.settings.value.phoneticAccent);
   }, 350);
@@ -267,57 +249,72 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-/* 盲测正文区 */
-.test-body {
+/* 盲听状态测试面板 */
+.test-body-listening {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 16px;
-  padding: 12px 0;
+  gap: 20px;
+  padding: 24px 0;
+  width: 100%;
 }
 
-/* 英文大字号句子展示及高斯模糊遮盖 */
-.english-text {
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1.4;
-  color: var(--text-primary, white);
-  word-wrap: break-word;
-  max-width: 100%;
-  transition: filter 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
-  cursor: pointer;
-}
-
-.english-text.is-blurred {
-  filter: blur(12px);
-  opacity: 0.55;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.english-text.is-blurred:hover {
-  filter: blur(9px);
-  opacity: 0.75;
-}
-
-/* 模糊提示指示标签 */
-.blur-tip-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #a5b4fc;
-  background: rgba(99, 102, 241, 0.08);
+.listening-icon-wrapper {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  background: rgba(99, 102, 241, 0.05);
   border: 1px solid rgba(99, 102, 241, 0.15);
-  padding: 3px 10px;
-  border-radius: 4px;
-  letter-spacing: 0.5px;
-  transition: all 0.3s ease;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8px;
 }
 
-.blur-tip-label.success {
-  color: #a7f3d0;
-  background: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.15);
+.ear-icon {
+  font-size: 2.5rem;
+  z-index: 2;
+  animation: float 3s ease-in-out infinite alternate;
+}
+
+.listening-tip {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+/* 听力盲测动画波纹 */
+.audio-waves {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.wave {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  animation: sonar 2.5s linear infinite;
+  opacity: 0;
+}
+
+.w2 {
+  animation-delay: 0.8s;
+}
+
+.w3 {
+  animation-delay: 1.6s;
 }
 
 .audio-control-row {
@@ -566,10 +563,6 @@ onUnmounted(() => {
   animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.animate-pulse {
-  animation: pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -580,8 +573,19 @@ onUnmounted(() => {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+@keyframes sonar {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@keyframes float {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-6px); }
 }
 </style>

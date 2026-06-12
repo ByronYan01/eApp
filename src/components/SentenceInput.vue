@@ -10,6 +10,7 @@
         @blur="isFocused = false"
         @keydown.meta.enter="handleSubmit"
         @keydown.ctrl.enter="handleSubmit"
+        @keydown.esc="clearInput"
         :disabled="loading"
       ></textarea>
       
@@ -145,12 +146,13 @@ textarea::placeholder {
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
+  padding: 8px; /* 增大点击响应热区，从 4px 调整为 8px */
   border-radius: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
   transition: all var(--transition-fast);
+  z-index: 10; /* 提升层级，确保不被输入框重叠遮挡 */
 }
 
 .clear-btn:hover {

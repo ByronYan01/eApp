@@ -56,7 +56,8 @@ export function useTTS() {
     accent: AccentType = 'US', 
     rate: number = playRate.value,
     source: AudioSourceType = 'local',
-    provider: string = 'auto'
+    provider: string = 'auto',
+    timeoutMs: number = 5000
   ) => {
     // 先停止当前正在播放的声音，避免混音重叠
     stop();
@@ -64,8 +65,8 @@ export function useTTS() {
     if (!text.trim()) return;
 
     if (source === 'online') {
-      // 执行在线真人原声播放 (调用我们全新的后端 Base64 代理，并透传提供商偏好)
-      playOnline(text, accent, provider);
+      // 执行在线真人原声播放 (调用我们全新的后端 Base64 代理，并透传提供商偏好、语速及超时参数)
+      playOnline(text, accent, rate, provider, timeoutMs);
     } else {
       // 执行本地 TTS 播放
       playLocal(text, accent, rate);
@@ -75,19 +76,22 @@ export function useTTS() {
   /**
    * 在线真人原声播放核心逻辑 (调用 Rust 后端级联多引擎代理服务，规避 Webview 跨域和防盗链)
    */
-  const playOnline = async (text: string, accent: AccentType, provider: string = 'auto') => {
+  const playOnline = async (text: string, accent: AccentType, rate: number, provider: string = 'auto', timeoutMs: number = 5000) => {
     isPlaying.value = true;
     currentAccent.value = accent;
+    playRate.value = rate; // 同步当前语速
 
     try {
-      // 调用 Rust 端代理命令 get_online_audio_backend 下载音频，并传递偏好提供商参数
+      // 调用 Rust 端已注册的 get_online_audio_backend 命令下载音频，并传递偏好提供商与超时参数
       const base64Audio = await invoke<string>('get_online_audio_backend', {
         text: text.trim(),
         accent,
-        provider
+        provider,
+        timeoutMs
       });
 
       currentAudio = new Audio(base64Audio);
+      currentAudio.playbackRate = rate; // 关键修复：将语速设置应用到在线音频播放上
       
       currentAudio.onended = () => {
         isPlaying.value = false;

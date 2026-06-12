@@ -125,6 +125,7 @@ const playWordAudio = (word: string, accent: 'US' | 'UK') => {
 // 格式化翻译与音标服务商名称显示
 const formatProviderName = (provider: string) => {
   switch (provider) {
+    case 'auto': return '自动智能兜底';
     case 'google': return 'Google 智能翻译';
     case 'youdao': return '有道网页查词';
     case 'baidu': return '百度划词接口';
