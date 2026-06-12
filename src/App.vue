@@ -790,7 +790,7 @@
                               </div>
                               <div class="version-row">
                                 <span class="info-label">当前版本:</span>
-                                <span class="info-val highlight">v0.1.0</span>
+                                <span class="info-val highlight">v{{ appVersion }}</span>
                               </div>
                               <div class="version-row">
                                 <span class="info-label">核心内核:</span>
@@ -870,6 +870,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { check } from '@tauri-apps/plugin-updater';
 import { useStorage, type AppSettings } from './composables/useStorage';
 import { useTTS } from './composables/useTTS';
@@ -895,6 +896,8 @@ const storage = useStorage();
 const tts = useTTS();
 
 const { sentences, loadData } = storage;
+
+const appVersion = ref('0.1.0');
 
 // 句子仓库中当前被展开显示解析详情的句子 ID
 const expandedSentenceId = ref<string | null>(null);
@@ -1482,7 +1485,7 @@ const checkForUpdates = async (silent = false) => {
     } else {
       updateAvailable.value = false;
       if (!silent) {
-        alert('当前已是最新版本 (v0.1.0)，无需更新。');
+        alert(`当前已是最新版本 (v${appVersion.value})，无需更新。`);
       }
     }
   } catch (err) {
@@ -1550,9 +1553,14 @@ const formatDate = (timestamp: number) => {
 };
 
 // 生命周期钩子：挂载时加载本地持久化数据并配置复习队列基数
-onMounted(() => {
+onMounted(async () => {
   loadData();
   initialReviewQueueLength.value = reviewQueue.value.length;
+  try {
+    appVersion.value = await getVersion();
+  } catch (e) {
+    console.error('获取应用版本失败:', e);
+  }
   // 静默检查自动更新
   checkForUpdates(true);
 });
