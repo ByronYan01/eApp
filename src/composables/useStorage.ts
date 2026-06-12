@@ -21,6 +21,13 @@ export interface SentenceItem {
   nextReviewTime: number; // 下次复习的时间戳
 }
 
+// 复习打卡历史日志接口
+export interface ReviewLog {
+  sentenceId: string;
+  timestamp: number;
+  remembered: boolean;
+}
+
 export interface AppSettings {
   phoneticAccent: 'US' | 'UK';           // 首选音标口音：US(美音) | UK(英音)
   allowPhoneticFallback: boolean;        // 是否允许音标降级 (true: 允许, false: 不允许)
@@ -61,6 +68,7 @@ const REVIEW_INTERVALS = [0, 30, 720, 1440, 2880, 5760, 10080, 21600];
 export function useStorage() {
   const sentences = ref<SentenceItem[]>([]);
   const settings = ref<AppSettings>({ ...DEFAULT_SETTINGS });
+  const reviewLogs = ref<ReviewLog[]>([]);
 
   /**
    * 1. 初始化并加载所有数据
@@ -77,6 +85,19 @@ export function useStorage() {
       console.error('加载本地句子数据失败:', e);
       sentences.value = [];
     }
+
+    try {
+      const logsStr = localStorage.getItem('eapp_review_history');
+      if (logsStr) {
+        reviewLogs.value = JSON.parse(logsStr);
+      } else {
+        reviewLogs.value = [];
+      }
+    } catch (e) {
+      console.error('加载本地复习历史失败:', e);
+      reviewLogs.value = [];
+    }
+
     // 顺便加载设置
     loadSettings();
   };
@@ -118,6 +139,12 @@ export function useStorage() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sentences.value));
     } catch (e) {
       console.error('保存句子数据失败:', e);
+    }
+
+    try {
+      localStorage.setItem('eapp_review_history', JSON.stringify(reviewLogs.value));
+    } catch (e) {
+      console.error('保存复习历史失败:', e);
     }
   };
 
@@ -180,6 +207,17 @@ export function useStorage() {
       item.reviewCount = 0;
       item.status = 'learning';
       item.nextReviewTime = Date.now() + 1 * 60 * 1000; // 1分钟后
+    }
+
+    // 记录复习打卡历史
+    reviewLogs.value.push({
+      sentenceId: id,
+      timestamp: Date.now(),
+      remembered: isRemembered
+    });
+    // 限制最大长度为 3000 条
+    if (reviewLogs.value.length > 3000) {
+      reviewLogs.value.shift();
     }
 
     saveData();
@@ -256,6 +294,7 @@ export function useStorage() {
   return {
     sentences,
     settings,
+    reviewLogs,
     loadData,
     loadSettings,
     saveSettings,

@@ -103,9 +103,14 @@
 
                 <!-- 当前有需要复习的卡片 -->
                 <div v-if="currentReviewItem" class="review-zone">
-                  <div class="progress-bar-container">
-                    <div class="progress-bar-fill" :style="{ width: `${reviewProgressPercentage}%` }"></div>
-                    <span class="progress-text">本轮剩余 {{ reviewQueue.length }} 个待复习</span>
+                  <div class="review-progress-wrapper">
+                    <div class="progress-info">
+                      <span class="progress-label">🎯 智能盲测复习</span>
+                      <span class="progress-text">本轮剩余 <span class="highlight-count">{{ reviewQueue.length }}</span> 个待复习</span>
+                    </div>
+                    <div class="progress-bar-container">
+                      <div class="progress-bar-fill" :style="{ width: `${reviewProgressPercentage}%` }"></div>
+                    </div>
                   </div>
                   
                   <ReviewCard 
@@ -283,6 +288,14 @@
                 <p>在【智能解析】中输入任何句子，并点击“加入复习列表”，您便能在此处统一管理它们，并开启智能复习。</p>
               </div>
             </div>
+
+            <!-- C. 学习数据可视化统计视图 -->
+            <DashboardView 
+              v-else-if="currentTab === 'dashboard'" 
+              class="tab-content-view"
+              :sentences="sentences" 
+              :review-logs="storage.reviewLogs.value" 
+            />
 
             <!-- D. 系统设置视图 -->
             <div v-else-if="currentTab === 'settings'" class="tab-content-view animate-fade-in">
@@ -865,12 +878,14 @@ import SentenceInput from './components/SentenceInput.vue';
 import SentenceResult from './components/SentenceResult.vue';
 import ReviewCard from './components/ReviewCard.vue';
 import InteractiveSentence from './components/InteractiveSentence.vue';
+import DashboardView from './components/DashboardView.vue';
 
 // 页面 Tab 选项配置 (新增“系统设置”选项，配置高颜值极简 SVG)
 const tabs = [
   { id: 'analyze', name: '智能解析', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>' },
   { id: 'review', name: '卡片复习', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>' },
   { id: 'repo', name: '句子仓库', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>' },
+  { id: 'dashboard', name: '学习统计', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>' },
   { id: 'settings', name: '系统设置', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>' }
 ];
 
@@ -1749,19 +1764,41 @@ onMounted(() => {
   gap: 20px;
 }
 
-.progress-bar-container {
+.review-progress-wrapper {
   width: 100%;
   max-width: 650px;
   margin: 0 auto;
-  height: 24px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--glass-border);
+  padding: 2px 4px;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.progress-label {
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.highlight-count {
+  color: #818cf8;
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin: 0 2px;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 99px;
   position: relative;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .progress-bar-fill {
@@ -1770,16 +1807,14 @@ onMounted(() => {
   left: 0;
   height: 100%;
   background: linear-gradient(90deg, var(--color-primary), #818cf8);
-  box-shadow: 0 0 10px var(--color-primary-glow);
+  box-shadow: 0 0 8px var(--color-primary-glow);
+  border-radius: 99px;
   transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .progress-text {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: white;
-  z-index: 2;
-  letter-spacing: 0.5px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
 .empty-state-card {
@@ -1818,6 +1853,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
+  gap: 24px;
   border-bottom: 1px solid var(--glass-border);
   padding-bottom: 24px;
   margin-bottom: 24px;
@@ -2081,6 +2117,36 @@ onMounted(() => {
   justify-content: flex-end;
   margin-top: 8px;
   padding-bottom: 40px;
+}
+
+.review-mode-selector {
+  display: flex;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  padding: 3px;
+  border-radius: 99px;
+  backdrop-filter: blur(8px);
+  height: fit-content;
+  flex-shrink: 0;
+}
+
+.mode-pill {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  border-radius: 99px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast, 0.2s);
+}
+
+.mode-pill.active {
+  background: linear-gradient(135deg, var(--color-primary), #4f46e5);
+  color: white;
+  box-shadow: 0 2px 8px var(--color-primary-glow);
 }
 
 /* 响应式媒体查询 */
@@ -2477,36 +2543,9 @@ input:checked + .slider:before {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 24px;
   width: 100%;
   margin-bottom: 8px;
-}
-
-.review-mode-selector {
-  display: flex;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--glass-border);
-  padding: 3px;
-  border-radius: 99px;
-  backdrop-filter: blur(8px);
-  height: fit-content;
-}
-
-.mode-pill {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  padding: 6px 14px;
-  border-radius: 99px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-fast, 0.2s);
-}
-
-.mode-pill.active {
-  background: linear-gradient(135deg, var(--color-primary), #4f46e5);
-  color: white;
-  box-shadow: 0 2px 8px var(--color-primary-glow);
 }
 
 /* 适配窄屏排版 */
