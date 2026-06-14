@@ -553,6 +553,181 @@ async fn github_write_gist_backend(token: String, gist_id: String, data: String)
     Ok("数据已成功推送到云端！".to_string())
 }
 
+#[tauri::command]
+async fn call_private_ai(
+    endpoint: String,
+    api_key: String,
+    model: String,
+    prompt: String,
+    system_prompt: Option<String>,
+) -> Result<String, String> {
+    // 60秒超时，因为大模型生成可能较慢
+    let client = get_http_client(60000)?;
+    
+    // 拼接请求 URL
+    let mut url = endpoint.trim().to_string();
+    if !url.ends_with("/chat/completions") {
+        if url.ends_with('/') {
+            url.push_str("chat/completions");
+        } else {
+            url.push_str("/chat/completions");
+        }
+    }
+
+    let mut messages = Vec::new();
+    if let Some(sys) = system_prompt {
+        if !sys.is_empty() {
+            messages.push(serde_json::json!({
+                "role": "system",
+                "content": sys
+            }));
+        }
+    }
+    messages.push(serde_json::json!({
+        "role": "user",
+        "content": prompt
+    }));
+
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "temperature": 0.3
+    });
+
+    let mut req = client.post(&url);
+    if !api_key.is_empty() {
+        req = req.bearer_auth(&api_key);
+    }
+
+    let response = req
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("网络请求发送失败: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let err_text = response.text().await.unwrap_or_default();
+        return Err(format!("AI 接口返回错误 ({}): {}", status, err_text));
+    }
+
+    let json_resp: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析 AI 响应 JSON 失败: {}", e))?;
+
+    if let Some(choices) = json_resp.get("choices").and_then(|v| v.as_array()) {
+        if let Some(first_choice) = choices.first() {
+            if let Some(message) = first_choice.get("message") {
+                if let Some(content) = message.get("content").and_then(|v| v.as_str()) {
+                    return Ok(content.to_string());
+                }
+            }
+        }
+    }
+
+    Err("未从 AI 响应中找到有效的内容 (choices.message.content 缺失)".to_string())
+}
+
+#[tauri::command]
+async fn call_private_ai_stream(
+    endpoint: String,
+    api_key: String,
+    model: String,
+    prompt: String,
+    system_prompt: Option<String>,
+    on_event: tauri::ipc::Channel<String>,
+) -> Result<(), String> {
+    use futures_util::StreamExt;
+
+    // 60秒超时，防止大模型生成过慢
+    let client = get_http_client(60000)?;
+    
+    // 拼接请求 URL
+    let mut url = endpoint.trim().to_string();
+    if !url.ends_with("/chat/completions") {
+        if url.ends_with('/') {
+            url.push_str("chat/completions");
+        } else {
+            url.push_str("/chat/completions");
+        }
+    }
+
+    let mut messages = Vec::new();
+    if let Some(sys) = system_prompt {
+        if !sys.is_empty() {
+            messages.push(serde_json::json!({
+                "role": "system",
+                "content": sys
+            }));
+        }
+    }
+    messages.push(serde_json::json!({
+        "role": "user",
+        "content": prompt
+    }));
+
+    // 开启流式响应
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "temperature": 0.3,
+        "stream": true
+    });
+
+    let mut req = client.post(&url);
+    if !api_key.is_empty() {
+        req = req.bearer_auth(&api_key);
+    }
+
+    let response = req
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("网络请求发送失败: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let err_text = response.text().await.unwrap_or_default();
+        return Err(format!("AI 接口返回错误 ({}): {}", status, err_text));
+    }
+
+    let mut stream = response.bytes_stream();
+    let mut buffer = String::new();
+
+    // 逐字节块读取流，拼接并按换行符拆分完整行
+    while let Some(item) = stream.next().await {
+        let bytes = item.map_err(|e| format!("读取流式数据失败: {}", e))?;
+        let chunk_str = String::from_utf8_lossy(&bytes);
+        buffer.push_str(&chunk_str);
+
+        while let Some(newline_idx) = buffer.find('\n') {
+            let line = buffer[..newline_idx].trim().to_string();
+            buffer = buffer[newline_idx + 1..].to_string();
+
+            if line.starts_with("data: ") {
+                let data_str = line[6..].trim();
+                if data_str == "[DONE]" {
+                    break;
+                }
+                if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(data_str) {
+                    if let Some(choices) = json_val.get("choices").and_then(|v| v.as_array()) {
+                        if let Some(first_choice) = choices.first() {
+                            if let Some(delta) = first_choice.get("delta") {
+                                let delta_str = delta.to_string();
+                                // 通过 tauri Channel 向前端推送这一帧 delta
+                                on_event.send(delta_str).map_err(|e| format!("通道推送失败: {}", e))?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -567,7 +742,9 @@ pub fn run() {
             get_online_audio_backend,
             github_create_gist_backend,
             github_read_gist_backend,
-            github_write_gist_backend
+            github_write_gist_backend,
+            call_private_ai,
+            call_private_ai_stream
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

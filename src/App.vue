@@ -297,6 +297,12 @@
               :review-logs="storage.reviewLogs.value" 
             />
 
+            <!-- E. 极简表达视图 -->
+            <BasicEnglishView
+              v-else-if="currentTab === 'basic'"
+              class="tab-content-view animate-fade-in"
+            />
+
             <!-- D. 系统设置视图 -->
             <div v-else-if="currentTab === 'settings'" class="tab-content-view animate-fade-in">
               <div class="center-box">
@@ -602,6 +608,68 @@
                                 />
                               </div>
                             </div>
+
+                            <!-- 7. 私域大模型 AI 助手配置 -->
+                            <div class="setting-item flex-column border-top">
+                              <div class="setting-header">
+                                <span class="setting-label">🤖 私域大模型 API 配置</span>
+                              </div>
+                              <p class="setting-hint">用于“极简表达”模块的动态造句出题，支持符合 OpenAI 兼容规范的私有接口。</p>
+                              
+                              <div class="setting-item flex-column" style="width: 100%; gap: 10px; padding-left: 0;">
+                                <div class="sub-input-group" style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+                                  <span class="setting-hint font-small" style="margin-bottom: 2px;">API Endpoint (必填)</span>
+                                  <input 
+                                    type="text" 
+                                    class="token-input" 
+                                    :value="storage.settings.value.aiEndpoint"
+                                    @input="e => updateSetting('aiEndpoint', (e.target as HTMLInputElement).value.trim())"
+                                    placeholder="例如：http://localhost:11434/v1 或 https://api.openai.com/v1"
+                                    style="width: 100%;"
+                                  />
+                                </div>
+
+                                <div class="sub-input-group" style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+                                  <span class="setting-hint font-small" style="margin-bottom: 2px;">API Key (选填，自建私有模型可为空)</span>
+                                  <input 
+                                    type="password" 
+                                    class="token-input" 
+                                    :value="storage.settings.value.aiApiKey"
+                                    @input="e => updateSetting('aiApiKey', (e.target as HTMLInputElement).value.trim())"
+                                    placeholder="请输入您的 API Key"
+                                    style="width: 100%;"
+                                  />
+                                </div>
+
+                                <div class="sub-input-group" style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+                                  <span class="setting-hint font-small" style="margin-bottom: 2px;">Model Name (必填，指定请求模型名称)</span>
+                                  <input 
+                                    type="text" 
+                                    class="token-input" 
+                                    :value="storage.settings.value.aiModel"
+                                    @input="e => updateSetting('aiModel', (e.target as HTMLInputElement).value.trim())"
+                                    placeholder="例如：gpt-4o-mini, llama3, qwen-plus"
+                                    style="width: 100%;"
+                                  />
+                                </div>
+
+                                <!-- 测试 AI 连接按钮及状态提示 -->
+                                <div class="test-connection-row" style="margin-top: 8px; display: flex; align-items: center; gap: 10px; width: 100%;">
+                                  <button 
+                                    class="speak-btn" 
+                                    :disabled="testingAiConnection" 
+                                    @click="testAiConnection"
+                                    style="padding: 6px 12px; font-size: 0.8rem; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.25); color: #c084fc; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s;"
+                                  >
+                                    <span v-if="testingAiConnection">⏳ 正在测试...</span>
+                                    <span v-else>⚡ 测试连接</span>
+                                  </button>
+                                  
+                                  <span v-if="aiConnectionStatus === 'success'" style="color: #34d399; font-size: 0.8rem; font-weight: 700;">✓ 连接成功！</span>
+                                  <span v-else-if="aiConnectionStatus === 'failed'" style="color: #f87171; font-size: 0.75rem; word-break: break-all;">✗ 连接失败: {{ aiConnectionError }}</span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -880,6 +948,7 @@ import SentenceResult from './components/SentenceResult.vue';
 import ReviewCard from './components/ReviewCard.vue';
 import InteractiveSentence from './components/InteractiveSentence.vue';
 import DashboardView from './components/DashboardView.vue';
+import BasicEnglishView from './components/BasicEnglishView.vue';
 
 // 页面 Tab 选项配置 (新增“系统设置”选项，配置高颜值极简 SVG)
 const tabs = [
@@ -887,6 +956,7 @@ const tabs = [
   { id: 'review', name: '卡片复习', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>' },
   { id: 'repo', name: '句子仓库', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>' },
   { id: 'dashboard', name: '学习统计', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>' },
+  { id: 'basic', name: '极简表达', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>' },
   { id: 'settings', name: '系统设置', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>' }
 ];
 
@@ -894,6 +964,46 @@ const currentTab = ref('analyze');
 const activeSettingsTab = ref('voice');
 const storage = useStorage();
 const tts = useTTS();
+
+// 连通性测试状态
+const testingAiConnection = ref(false);
+const aiConnectionStatus = ref<'idle' | 'success' | 'failed'>('idle');
+const aiConnectionError = ref('');
+
+// 测试私域 AI 大模型连通性函数
+const testAiConnection = async () => {
+  const settings = storage.settings.value;
+  if (!settings.aiEndpoint) {
+    alert('请先填写 API Endpoint 才能进行测试！');
+    return;
+  }
+  testingAiConnection.value = true;
+  aiConnectionStatus.value = 'idle';
+  aiConnectionError.value = '';
+  
+  try {
+    const resp = await invoke<string>('call_private_ai', {
+      endpoint: settings.aiEndpoint,
+      apiKey: settings.aiApiKey || '',
+      model: settings.aiModel || 'gpt-4o-mini',
+      prompt: 'ping',
+      systemPrompt: '你是一个测试连接的助手。收到用户发送的 ping 后，请只回复 OK，不要有其他多余字符。'
+    });
+    
+    // 如果接口能正常响应内容，则判定连接成功
+    if (resp && (resp.toLowerCase().includes('ok') || resp.trim().length > 0)) {
+      aiConnectionStatus.value = 'success';
+    } else {
+      aiConnectionStatus.value = 'failed';
+      aiConnectionError.value = '大模型未返回预期响应';
+    }
+  } catch (e: any) {
+    aiConnectionStatus.value = 'failed';
+    aiConnectionError.value = e.toString() || '连接超时或未响应';
+  } finally {
+    testingAiConnection.value = false;
+  }
+};
 
 const { sentences, loadData } = storage;
 

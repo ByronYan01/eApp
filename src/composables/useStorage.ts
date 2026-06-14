@@ -41,6 +41,9 @@ export interface AppSettings {
   githubToken: string;                   // GitHub Access Token
   githubGistId: string;                  // GitHub Gist ID
   lastSyncedAt: number;                  // 上次同步完成时间戳
+  aiEndpoint: string;                    // 私域大模型 API Endpoint
+  aiApiKey: string;                      // 私域大模型 API Key
+  aiModel: string;                       // 私域大模型模型名称
 }
 
 const STORAGE_KEY = 'eapp_sentence_data';
@@ -58,7 +61,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   audioTimeout: 5000,
   githubToken: '',
   githubGistId: '',
-  lastSyncedAt: 0
+  lastSyncedAt: 0,
+  aiEndpoint: '',
+  aiApiKey: '',
+  aiModel: ''
 };
 
 // 艾宾浩斯复习阶段时间间隔 (单位: 分钟)

@@ -1,5 +1,5 @@
 <template>
-  <div class="words-flow" :style="{ fontSize: fontSize || '1.6rem' }">
+  <div class="words-flow" :class="{ 'is-compact': compact }" :style="{ fontSize: fontSize || '1.6rem' }">
     <span 
       v-for="(word, index) in words" 
       :key="index"
@@ -34,10 +34,11 @@
 <script setup lang="ts">
 import type { WordDetail } from '../composables/useStorage';
 
-// 定义组件的 Props，允许传入单词详情列表和自定义字号
+// 定义组件的 Props，允许传入单词详情列表、自定义字号及紧凑模式开关
 defineProps<{
   words: WordDetail[];
   fontSize?: string;
+  compact?: boolean;
 }>();
 
 // 定义组件向外派发的事件：播放单词发音
@@ -61,6 +62,13 @@ const playWordAudio = (word: string, accent: 'US' | 'UK') => {
   font-weight: 600;
 }
 
+/* 紧凑模式下消除多余间距，实现完全自然的单词排版 */
+.words-flow.is-compact {
+  column-gap: 0px;
+  row-gap: 4px;
+  font-weight: 500;
+}
+
 /* 单词交互效果 */
 .interactive-word-span {
   position: relative;
@@ -69,6 +77,10 @@ const playWordAudio = (word: string, accent: 'US' | 'UK') => {
   border-radius: 4px;
   padding: 0 2px;
   transition: all var(--transition-fast, 0.2s);
+}
+
+.words-flow.is-compact .interactive-word-span {
+  padding: 0 1px;
 }
 
 .interactive-word-span.has-info:hover {
