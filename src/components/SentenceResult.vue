@@ -56,12 +56,14 @@
           <PlayButton 
             type="US" 
             :isPlaying="playingAccent === 'US' && isPlaying"
+            :isLoading="playingAccent === 'US' && isLoading"
             @play="$emit('play-audio', 'US')"
           />
           <!-- 英音发音 -->
           <PlayButton 
             type="UK" 
             :isPlaying="playingAccent === 'UK' && isPlaying"
+            :isLoading="playingAccent === 'UK' && isLoading"
             @play="$emit('play-audio', 'UK')"
           />
         </div>
@@ -103,6 +105,7 @@ const props = withDefaults(
     isSaved: boolean;
     isPlaying: boolean;
     playingAccent: 'US' | 'UK';
+    isLoading?: boolean;
     playRate: number;
     translationProvider: string;
     audioPlaySource: string;
@@ -111,7 +114,8 @@ const props = withDefaults(
     showSaveBtn?: boolean;
   }>(),
   {
-    showSaveBtn: true
+    showSaveBtn: true,
+    isLoading: false
   }
 );
 

@@ -23,11 +23,27 @@
       
       <!-- 盲听模式音频操作组 -->
       <div class="audio-control-row">
-        <button class="audio-accent-btn" @click="playTTS(item.text, 'US')" title="播放美式发音">
-          <span class="speaker-icon">🔊</span> US 美音再次播放
+        <button 
+          class="audio-accent-btn" 
+          :disabled="tts.isLoading.value"
+          @click="playTTS(item.text, 'US')" 
+          :title="tts.isLoading.value ? '正在加载在线发音...' : '播放美音 (快捷键 Q)'"
+        >
+          <span v-if="tts.isLoading.value && tts.currentAccent.value === 'US'" class="loading-spinner">⌛</span>
+          <span v-else class="speaker-icon">🔊</span>
+          {{ tts.isLoading.value && tts.currentAccent.value === 'US' ? '加载中...' : 'US 美音' }}
+          <span class="key-hint">Q</span>
         </button>
-        <button class="audio-accent-btn uk" @click="playTTS(item.text, 'UK')" title="播放英式发音">
-          <span class="speaker-icon">🔊</span> UK 英音再次播放
+        <button 
+          class="audio-accent-btn uk" 
+          :disabled="tts.isLoading.value"
+          @click="playTTS(item.text, 'UK')" 
+          :title="tts.isLoading.value ? '正在加载在线发音...' : '播放英音 (快捷键 W)'"
+        >
+          <span v-if="tts.isLoading.value && tts.currentAccent.value === 'UK'" class="loading-spinner">⌛</span>
+          <span v-else class="speaker-icon">🔊</span>
+          {{ tts.isLoading.value && tts.currentAccent.value === 'UK' ? '加载中...' : 'UK 英音' }}
+          <span class="key-hint">W</span>
         </button>
       </div>
 
@@ -51,6 +67,7 @@
         :isSaved="true"
         :isPlaying="tts.isPlaying.value"
         :playingAccent="tts.currentAccent.value"
+        :isLoading="tts.isLoading.value"
         v-model:playRate="tts.playRate.value"
         :translationProvider="storage.settings.value.translationProvider"
         :audioPlaySource="storage.settings.value.audioPlaySource"
@@ -93,6 +110,15 @@
         </div>
       </div>
     </div>
+
+    <!-- D. 自定义轻量非阻断式模态错误提示框 -->
+    <div v-if="showErrorModal" class="error-modal-overlay">
+      <div class="error-modal-card animate-scale-in">
+        <h3 class="error-modal-title">🔇 暂无网络发音</h3>
+        <p class="error-modal-body">{{ errorModalMsg || '请稍后重试或检查您的网络。' }}</p>
+        <button class="error-modal-confirm-btn" @click="closeErrorModal">好的</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -116,6 +142,22 @@ const emit = defineEmits<{
 const isAnswerRevealed = ref(false);
 const tts = useTTS();
 const storage = useStorage();
+
+const showErrorModal = ref(false);
+const errorModalMsg = ref('');
+
+// 监听错误信息，调起模态确认弹窗
+watch(() => tts.errorMessage.value, (newVal) => {
+  if (newVal) {
+    errorModalMsg.value = newVal;
+    showErrorModal.value = true;
+  }
+});
+
+const closeErrorModal = () => {
+  showErrorModal.value = false;
+  tts.errorMessage.value = ''; // 清空错误以备下次重试
+};
 
 // 加载配置
 storage.loadSettings();
@@ -146,8 +188,14 @@ const playWordTTS = (word: string, accent: 'US' | 'UK') => {
   tts.play(word, accent, tts.playRate.value, storage.settings.value.audioPlaySource, storage.settings.value.audioPlayProvider, storage.settings.value.audioTimeout);
 };
 
-// 全局键盘快捷键响应 (Space 揭晓答案/返回，1 和 2 快速数字键评分)
+// 全局键盘快捷键响应 (Space 揭晓答案/返回，1 和 2 快速数字键评分，Q 和 W 播放美音/英音)
 const handleKeyDown = (e: KeyboardEvent) => {
+  // 如果错误弹窗处于开启状态，拦截所有热键操作，强迫用户必须确认
+  if (showErrorModal.value) {
+    e.preventDefault();
+    return;
+  }
+
   const activeEl = document.activeElement;
   if (activeEl && (
     activeEl.tagName === 'INPUT' || 
@@ -157,6 +205,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
     return;
   }
 
+  const key = e.key.toLowerCase();
   if (e.code === 'Space') {
     e.preventDefault();
     if (!isAnswerRevealed.value) {
@@ -173,6 +222,16 @@ const handleKeyDown = (e: KeyboardEvent) => {
     if (isAnswerRevealed.value) {
       e.preventDefault();
       handleRate(true);
+    }
+  } else if (key === 'q') {
+    e.preventDefault();
+    if (!tts.isLoading.value) {
+      playTTS(props.item.text, 'US');
+    }
+  } else if (key === 'w') {
+    e.preventDefault();
+    if (!tts.isLoading.value) {
+      playTTS(props.item.text, 'UK');
     }
   }
 };
@@ -202,7 +261,7 @@ onUnmounted(() => {
 .review-panel-card {
   width: 100%;
   max-width: 780px;
-  margin: 0 auto;
+  margin: 0 auto 40px auto;
   background: var(--glass-bg, rgba(255, 255, 255, 0.02));
   backdrop-filter: var(--glass-blur, blur(20px));
   -webkit-backdrop-filter: var(--glass-blur, blur(20px));
@@ -533,7 +592,8 @@ onUnmounted(() => {
   transition: all var(--transition-fast, 0.2s);
 }
 
-.rate-button:hover .key-hint {
+.rate-button:hover .key-hint,
+.audio-accent-btn:hover .key-hint {
   background: rgba(255, 255, 255, 0.25);
   color: white;
   border-color: rgba(255, 255, 255, 0.4);
@@ -587,5 +647,121 @@ onUnmounted(() => {
 @keyframes float {
   0% { transform: translateY(0); }
   100% { transform: translateY(-6px); }
+}
+
+/* 沙漏加载旋转 */
+.loading-spinner {
+  display: inline-block;
+  animation: spin 1.2s linear infinite;
+  font-size: 0.85rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 按钮禁用状态样式（在线加载中） */
+.audio-accent-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  background: rgba(255, 255, 255, 0.01) !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
+  color: var(--text-muted, #64748b) !important;
+}
+
+.audio-accent-btn:disabled .key-hint {
+  opacity: 0.3;
+}
+
+/* 自定义模态错误框遮罩 */
+.error-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.45); /* 降低暗色蒙层浓度，减弱压抑感 */
+  backdrop-filter: blur(6px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+  border-radius: var(--radius-lg, 16px);
+}
+
+/* 模态卡片 */
+.error-modal-card {
+  background: rgba(30, 41, 59, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08); /* 采用高级淡灰色边框代替红色警报边框 */
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+  padding: 20px 24px;
+  border-radius: var(--radius-md, 12px);
+  width: 85%;
+  max-width: 270px; /* 更加轻量紧凑 */
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.error-modal-title {
+  font-size: 1.0rem;
+  font-weight: 700;
+  color: #e2e8f0; /* 温和中性的亮灰色代替刺眼淡红色 */
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.error-modal-body {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  margin: 0 0 4px 0;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+/* 自定义确认按钮（温和的非警告样式） */
+.error-modal-confirm-btn {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f5f9;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 6px 20px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: all var(--transition-fast, 0.2s) ease;
+}
+
+.error-modal-confirm-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+.error-modal-confirm-btn:active {
+  transform: translateY(0);
+}
+
+/* 缩放动画 */
+.animate-scale-in {
+  animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 </style>

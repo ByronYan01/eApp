@@ -70,6 +70,16 @@
                     @play-audio="handlePlayParsedAudio"
                     @play-word-audio="handlePlayWordAudio"
                   />
+                  <!-- 收藏目标仓库选择器 -->
+                  <div class="save-repo-selector-row" v-if="parsedResult && !isCurrentSentenceSaved">
+                    <span class="save-repo-label">收藏目标仓库：</span>
+                    <select v-model="selectedSaveRepoId" class="glass-select">
+                      <option value="default">🏠 默认收集</option>
+                      <option v-for="repo in storage.repositories.value.filter(r => r.id !== 'default')" :key="repo.id" :value="repo.id">
+                        📚 {{ repo.name }}
+                      </option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -98,6 +108,20 @@
                     >
                       🔀 随机复习
                     </button>
+                  </div>
+                </div>
+
+                <!-- 仓库分类过滤 -->
+                <div class="review-filter-row">
+                  <div class="review-repo-selector">
+                    <span class="review-repo-label">当前复习分类库：</span>
+                    <select v-model="selectedReviewRepoId" class="glass-select">
+                      <option value="all">📂 全部仓库 ({{ sentences.length }})</option>
+                      <option value="default">🏠 默认收集 ({{ getRepoSentenceCount('default') }})</option>
+                      <option v-for="repo in storage.repositories.value.filter(r => r.id !== 'default')" :key="repo.id" :value="repo.id">
+                        📚 {{ repo.name }} ({{ getRepoSentenceCount(repo.id) }})
+                      </option>
+                    </select>
                   </div>
                 </div>
 
@@ -130,162 +154,294 @@
             </div>
 
             <!-- C. 句子仓库列表视图 -->
+            <!-- C. 句子仓库列表视图 (升级为多仓库管理及批量处理结构) -->
             <div v-else-if="currentTab === 'repo'" class="tab-content-view">
-              <div class="repo-header-row">
-                <div>
-                  <h2 class="section-headline">我的句子仓库 ({{ sentences.length }})</h2>
-                  <p class="section-subtitle">管理您收藏的所有英语句子，支持一键备份导出和导入恢复。</p>
-                </div>
+              <div class="repo-layout-container">
                 
-                <!-- 备份管理按钮组 -->
-                <div class="backup-actions">
-                  <button class="backup-btn export" @click="storage.exportData" title="备份到本地 JSON">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-                    </svg>
-                    导出备份
-                  </button>
+                <!-- 左栏：分类仓库侧边栏 -->
+                <div class="repo-sidebar-panel">
+                  <div class="sidebar-header">
+                    <span class="sidebar-title">仓库分类</span>
+                    <button class="add-repo-btn-mini" @click="showCreateRepoModal = true" title="新建分类仓库">
+                      ➕ 新建
+                    </button>
+                  </div>
                   
-                  <label class="backup-btn import" title="从 JSON 备份中恢复">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                    </svg>
-                    导入备份
-                    <input type="file" accept=".json" @change="handleImportBackup" style="display: none;" />
-                  </label>
-                </div>
-              </div>
+                  <div class="repo-menu-list">
+                    <!-- 全部 -->
+                    <div 
+                      class="repo-menu-item" 
+                      :class="{ 'active': selectedRepoId === 'all' }"
+                      @click="selectedRepoId = 'all'"
+                    >
+                      <span class="repo-icon">📂</span>
+                      <span class="repo-name-text">全部句子</span>
+                      <span class="repo-badge-count">{{ getRepoSentenceCount('all') }}</span>
+                    </div>
 
-              <!-- 句子列表流 -->
-              <div v-if="sentences.length > 0" class="repo-list">
-                <div 
-                  v-for="item in sentences" 
-                  :key="item.id" 
-                  class="sentence-repo-card"
-                  :class="{ 'is-expanded': expandedSentenceId === item.id }"
-                >
-                  <div class="repo-card-main">
-                    <div class="repo-card-text selectable">{{ item.text }}</div>
-                    <div class="repo-card-translation selectable">{{ item.translation }}</div>
+                    <!-- 默认仓库 -->
+                    <div 
+                      class="repo-menu-item" 
+                      :class="{ 'active': selectedRepoId === 'default' }"
+                      @click="selectedRepoId = 'default'"
+                    >
+                      <span class="repo-icon">🏠</span>
+                      <span class="repo-name-text">默认收集</span>
+                      <span class="repo-badge-count">{{ getRepoSentenceCount('default') }}</span>
+                    </div>
 
-                    <!-- 智能解析展开部分 -->
-                    <Transition name="expand">
-                      <div v-if="expandedSentenceId === item.id" class="repo-card-detail">
-                        <div class="detail-divider"></div>
-                        
-                        <!-- 1. 英文原句智能解析区 (悬浮查词) -->
-                        <div class="detail-section">
-                          <h4 class="detail-title">智能解析 (单词悬浮查词)：</h4>
-                          <div class="detail-interactive-box">
-                            <InteractiveSentence 
-                              :words="item.words" 
-                              fontSize="1.3rem"
-                              @play-word-audio="handlePlayWordAudio"
-                            />
-                          </div>
-                        </div>
-
-                        <!-- 2. 整句连读音标 -->
-                        <div v-if="item.phonetics" class="detail-section">
-                          <div class="detail-phonetics">
-                            整句连读音标：<span>{{ item.phonetics }}</span>
-                          </div>
-                        </div>
-
-                        <!-- 3. 重点词汇分析列表 -->
-                        <div v-if="item.words && item.words.length > 0" class="detail-section">
-                          <h4 class="detail-title">重点词汇释义：</h4>
-                          <div class="detail-words-grid">
-                            <div 
-                              v-for="word in item.words.filter(w => w.clean && w.explain && w.explain !== '暂无单词释义' && w.explain !== '查询失败')" 
-                              :key="word.clean" 
-                              class="detail-word-chip"
-                            >
-                              <div class="chip-word-header">
-                                <span class="chip-word-name">{{ word.clean }}</span>
-                                <span class="chip-word-phonetic" v-if="word.phonetic">{{ word.phonetic }}</span>
-                                <div class="chip-word-speakers">
-                                  <button class="chip-speaker-btn" @click.stop="handlePlayWordAudio(word.clean, 'US')" title="美音发音">US 🔊</button>
-                                  <button class="chip-speaker-btn" @click.stop="handlePlayWordAudio(word.clean, 'UK')" title="英音发音">UK 🔊</button>
-                                </div>
-                              </div>
-                              <p class="chip-word-explain">{{ word.explain }}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </Transition>
-
-                    <div class="repo-card-meta">
-                      <span class="meta-tag" :class="item.status">
-                        {{ item.status === 'learning' ? '学习中' : '已掌握' }}
-                      </span>
-                      <span class="meta-time">添加于: {{ formatDate(item.addedAt) }}</span>
-                      <span class="meta-count">复戏次数: {{ item.reviewCount }}</span>
+                    <!-- 自定义仓库列表 -->
+                    <div 
+                      v-for="repo in storage.repositories.value.filter(r => r.id !== 'default')" 
+                      :key="repo.id"
+                      class="repo-menu-item"
+                      :class="{ 'active': selectedRepoId === repo.id }"
+                      @click="selectedRepoId = repo.id"
+                    >
+                      <span class="repo-icon">📚</span>
                       
-                      <!-- 增加展开/收起文字提示按钮 -->
-                      <button 
-                        class="meta-expand-toggle-btn"
-                        @click="toggleExpandSentence(item.id)"
-                      >
-                        {{ expandedSentenceId === item.id ? '收起解析 ▲' : '查看解析详情 ▼' }}
-                      </button>
+                      <!-- 重命名编辑模式 -->
+                      <input 
+                        v-if="editingRepoId === repo.id"
+                        v-model="editingRepoName"
+                        class="repo-rename-input"
+                        @blur="handleRenameRepo(repo.id)"
+                        @keydown.enter="handleRenameRepo(repo.id)"
+                        @click.stop
+                        ref="renameInputRef"
+                      />
+                      <span v-else class="repo-name-text" :title="repo.description || repo.name">{{ repo.name }}</span>
+                      
+                      <span class="repo-badge-count">{{ getRepoSentenceCount(repo.id) }}</span>
+                      
+                      <!-- 悬浮操作图标 -->
+                      <div class="repo-item-actions" v-if="editingRepoId !== repo.id">
+                        <button class="repo-action-mini" @click.stop="editingRepoId = repo.id; editingRepoName = repo.name" title="重命名">
+                          ✏️
+                        </button>
+                        <button class="repo-action-mini delete" @click.stop="handleDeleteRepo(repo.id)" title="删除分类">
+                          🗑️
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  
-                  <div class="repo-card-actions">
-                    <!-- 解析详情切换按钮 (新增) -->
-                    <button 
-                      class="action-circle-btn info"
-                      :class="{ 'active': expandedSentenceId === item.id }"
-                      @click="toggleExpandSentence(item.id)"
-                      :title="expandedSentenceId === item.id ? '收起解析' : '查看解析详情'"
+
+                  <!-- 批量材料导入按钮 -->
+                  <button class="bulk-import-trigger-btn" @click="showImportModal = true">
+                    📥 批量导入学习材料
+                  </button>
+                </div>
+
+                <!-- 右栏：句子展示流 -->
+                <div class="repo-main-content">
+                  <div class="repo-header-row">
+                    <div>
+                      <h2 class="section-headline">
+                        {{ selectedRepoId === 'all' ? '全部句子' : (storage.repositories.value.find(r => r.id === selectedRepoId)?.name || '未名仓库') }}
+                        ({{ filteredSentences.length }})
+                      </h2>
+                      <p class="section-subtitle">
+                        {{ selectedRepoId === 'all' ? '管理您收藏的全部句子。' : (storage.repositories.value.find(r => r.id === selectedRepoId)?.description || '管理当前分类下的学习句子。') }}
+                      </p>
+                    </div>
+                    
+                    <!-- 批量管理与备份按钮组 -->
+                    <div class="backup-actions">
+                      <button 
+                        class="backup-btn batch-manage" 
+                        :class="{ 'active': isBatchMode }" 
+                        @click="toggleBatchMode"
+                        v-if="filteredSentences.length > 0"
+                      >
+                        ⚡ 批量管理
+                      </button>
+                      
+                      <button class="backup-btn export" @click="storage.exportData" title="备份所有数据到本地 JSON">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                        </svg>
+                        导出备份
+                      </button>
+                      
+                      <label class="backup-btn import" title="从 JSON 备份中恢复">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                        </svg>
+                        导入备份
+                        <input type="file" accept=".json" @change="handleImportBackup" style="display: none;" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- 批量操作控制台 -->
+                  <Transition name="expand">
+                    <div class="batch-control-bar" v-if="isBatchMode && filteredSentences.length > 0">
+                      <div class="batch-left">
+                        <span class="batch-selected-count">已选中 <strong>{{ selectedSentenceIds.length }}</strong> 项</span>
+                        <button class="batch-action-link" @click="selectedSentenceIds = selectedSentenceIds.length === filteredSentences.length ? [] : filteredSentences.map(s => s.id)">
+                          {{ selectedSentenceIds.length === filteredSentences.length ? '取消全选' : '选择当前全部' }}
+                        </button>
+                      </div>
+                      <div class="batch-right" v-if="selectedSentenceIds.length > 0">
+                        <span class="batch-action-label">转移到：</span>
+                        <select v-model="batchTargetRepoId" class="batch-repo-select">
+                          <option value="" disabled>选择分类仓库</option>
+                          <option v-for="r in storage.repositories.value" :key="r.id" :value="r.id">{{ r.name }}</option>
+                        </select>
+                        <button class="batch-btn-exec move" :disabled="!batchTargetRepoId" @click="handleBatchMove">确定转移</button>
+                        <button class="batch-btn-exec delete" @click="handleBatchDelete">批量删除</button>
+                      </div>
+                    </div>
+                  </Transition>
+
+                  <!-- 句子列表 -->
+                  <div v-if="filteredSentences.length > 0" class="repo-list">
+                    <div 
+                      v-for="item in filteredSentences" 
+                      :key="item.id" 
+                      class="sentence-repo-card"
+                      :class="{ 'is-expanded': expandedSentenceId === item.id, 'is-selected': selectedSentenceIds.includes(item.id) }"
+                      @click="isBatchMode ? toggleSelectSentence(item.id) : null"
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        <line x1="11" y1="8" x2="11" y2="14"></line>
-                        <line x1="8" y1="11" x2="14" y2="11"></line>
-                      </svg>
-                    </button>
-                    <!-- 朗读按钮 (同步首选口音、发音通道配置与发音服务商) -->
-                    <button 
-                      class="action-circle-btn" 
-                      @click="tts.play(item.text, storage.settings.value.phoneticAccent, tts.playRate.value, storage.settings.value.audioPlaySource, storage.settings.value.audioPlayProvider, storage.settings.value.audioTimeout)" 
-                      title="朗读句子"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                      </svg>
-                    </button>
-                    <!-- 切换掌握状态 -->
-                    <button 
-                      class="action-circle-btn check" 
-                      :class="{ 'active': item.status === 'mastered' }"
-                      @click="storage.toggleStatus(item.id)"
-                      :title="item.status === 'mastered' ? '设为学习中' : '设为已掌握'"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                      </svg>
-                    </button>
-                    <!-- 删除按钮 -->
-                    <button class="action-circle-btn trash" @click="storage.deleteSentence(item.id)" title="删除句子">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                      </svg>
-                    </button>
+                      <!-- 批量选择框 -->
+                      <div class="repo-card-checkbox-col" v-if="isBatchMode" @click.stop>
+                        <input 
+                          type="checkbox" 
+                          :checked="selectedSentenceIds.includes(item.id)"
+                          @change="toggleSelectSentence(item.id)"
+                          class="repo-card-checkbox"
+                        />
+                      </div>
+
+                      <div class="repo-card-main">
+                        <div class="repo-card-text selectable" @click="isBatchMode ? toggleSelectSentence(item.id) : null">{{ item.text }}</div>
+                        <div class="repo-card-translation selectable">{{ item.translation }}</div>
+
+                        <!-- 智能解析展开部分 -->
+                        <Transition name="expand">
+                          <div v-if="expandedSentenceId === item.id" class="repo-card-detail" @click.stop>
+                            <div class="detail-divider"></div>
+                            
+                            <!-- 1. 英文原句智能解析区 (悬浮查词) -->
+                            <div class="detail-section">
+                              <h4 class="detail-title">智能解析 (单词悬浮查词)：</h4>
+                              <div class="detail-interactive-box">
+                                <InteractiveSentence 
+                                  :words="item.words" 
+                                  fontSize="1.3rem"
+                                  @play-word-audio="handlePlayWordAudio"
+                                />
+                              </div>
+                            </div>
+
+                            <!-- 2. 整句连读音标 -->
+                            <div v-if="item.phonetics" class="detail-section">
+                              <div class="detail-phonetics">
+                                整句连读音标：<span>{{ item.phonetics }}</span>
+                              </div>
+                            </div>
+
+                            <!-- 3. 重点词汇分析列表 -->
+                            <div v-if="item.words && item.words.length > 0" class="detail-section">
+                              <h4 class="detail-title">重点词汇释义：</h4>
+                              <div class="detail-words-grid">
+                                <div 
+                                  v-for="word in item.words.filter(w => w.clean && w.explain && w.explain !== '暂无单词释义' && w.explain !== '查询失败')" 
+                                  :key="word.clean" 
+                                  class="detail-word-chip"
+                                >
+                                  <div class="chip-word-header">
+                                    <span class="chip-word-name">{{ word.clean }}</span>
+                                    <span class="chip-word-phonetic" v-if="word.phonetic">{{ word.phonetic }}</span>
+                                    <div class="chip-word-speakers">
+                                      <button class="chip-speaker-btn" @click.stop="handlePlayWordAudio(word.clean, 'US')" title="美音发音">US 🔊</button>
+                                      <button class="chip-speaker-btn" @click.stop="handlePlayWordAudio(word.clean, 'UK')" title="英音发音">UK 🔊</button>
+                                    </div>
+                                  </div>
+                                  <p class="chip-word-explain">{{ word.explain }}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </Transition>
+
+                        <div class="repo-card-meta" @click.stop>
+                          <span class="meta-tag" :class="item.status">
+                            {{ item.status === 'learning' ? '学习中' : '已掌握' }}
+                          </span>
+                          <!-- 句子所在仓库标签 -->
+                          <span class="meta-repo-tag" v-if="selectedRepoId === 'all'">
+                            🏷️ {{ storage.repositories.value.find(r => r.id === (item.repoId || 'default'))?.name || '默认仓库' }}
+                          </span>
+                          <span class="meta-time">添加于: {{ formatDate(item.addedAt) }}</span>
+                          <span class="meta-count">复习次数: {{ item.reviewCount }}</span>
+                          
+                          <!-- 展开/收起文字提示按钮 -->
+                          <button 
+                            class="meta-expand-toggle-btn"
+                            @click="toggleExpandSentence(item.id)"
+                          >
+                            {{ expandedSentenceId === item.id ? '收起解析 ▲' : '查看解析详情 ▼' }}
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div class="repo-card-actions" @click.stop>
+                        <!-- 解析详情切换按钮 -->
+                        <button 
+                          class="action-circle-btn info"
+                          :class="{ 'active': expandedSentenceId === item.id }"
+                          @click="toggleExpandSentence(item.id)"
+                          :title="expandedSentenceId === item.id ? '收起解析' : '查看解析详情'"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            <line x1="11" y1="8" x2="11" y2="14"></line>
+                            <line x1="8" y1="11" x2="14" y2="11"></line>
+                          </svg>
+                        </button>
+                        <!-- 朗读按钮 -->
+                        <button 
+                          class="action-circle-btn" 
+                          @click="tts.play(item.text, storage.settings.value.phoneticAccent, tts.playRate.value, storage.settings.value.audioPlaySource, storage.settings.value.audioPlayProvider, storage.settings.value.audioTimeout)" 
+                          title="朗读句子"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                          </svg>
+                        </button>
+                        <!-- 切换掌握状态 -->
+                        <button 
+                          class="action-circle-btn check" 
+                          :class="{ 'active': item.status === 'mastered' }"
+                          @click="storage.toggleStatus(item.id)"
+                          :title="item.status === 'mastered' ? '设为学习中' : '设为已掌握'"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                          </svg>
+                        </button>
+                        <!-- 删除按钮 -->
+                        <button class="action-circle-btn trash" @click="storage.deleteSentence(item.id)" title="删除句子">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 空库提示 -->
+                  <div v-else class="empty-state-card">
+                    <div class="box-icon">📦</div>
+                    <h3>本分类下没有句子</h3>
+                    <p>您可以在【智能解析】中将句子保存到此分类，或者点击左侧“批量导入学习材料”快速灌入句子。</p>
                   </div>
                 </div>
-              </div>
 
-              <!-- 空库提示 -->
-              <div v-else class="empty-state-card">
-                <div class="box-icon">📦</div>
-                <h3>您的句子仓库空空如也</h3>
-                <p>在【智能解析】中输入任何句子，并点击“加入复习列表”，您便能在此处统一管理它们，并开启智能复习。</p>
               </div>
             </div>
 
@@ -932,6 +1088,143 @@
         </div>
       </div>
     </Transition>
+
+    <!-- === 新增：新建分类仓库模态框 === -->
+    <Transition name="fade">
+      <div class="custom-modal-overlay" v-if="showCreateRepoModal" @click.self="showCreateRepoModal = false">
+        <div class="custom-modal-card">
+          <div class="modal-glow"></div>
+          <div class="custom-modal-header">
+            <h3 class="modal-headline">🆕 新建分类仓库</h3>
+            <button class="modal-close-x" @click="showCreateRepoModal = false">×</button>
+          </div>
+          <div class="modal-body-form">
+            <div class="form-group-item">
+              <label class="form-item-label">分类仓库名称：</label>
+              <input 
+                v-model="newRepoName" 
+                placeholder="例如：极简英语 850, 雅思核心句..."
+                class="form-item-input"
+                maxlength="20"
+                @keyup.enter="handleCreateRepo"
+              />
+            </div>
+            <div class="form-group-item">
+              <label class="form-item-label">分类备注描述：</label>
+              <textarea 
+                v-model="newRepoDesc" 
+                placeholder="简短说明该仓库下的句子学习目标或整理来源（选填）"
+                class="form-item-textarea"
+                rows="3"
+                maxlength="100"
+              ></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="modal-btn cancel" @click="showCreateRepoModal = false">取消</button>
+            <button class="modal-btn confirm" :disabled="!newRepoName.trim()" @click="handleCreateRepo">确认创建</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- === 新增：批量导入学习材料模态框 === -->
+    <Transition name="fade">
+      <div class="custom-modal-overlay" v-if="showImportModal" @click.self="importing ? null : showImportModal = false">
+        <div class="custom-modal-card import-card">
+          <div class="modal-glow"></div>
+          <div class="custom-modal-header">
+            <h3 class="modal-headline">📥 批量导入学习材料</h3>
+            <button class="modal-close-x" :disabled="importing" @click="showImportModal = false">×</button>
+          </div>
+          <div class="modal-body-form" v-if="!importing">
+            <div class="form-group-item">
+              <label class="form-item-label">导入目标仓库：</label>
+              <div class="import-repo-selector-row">
+                <select v-model="importTargetRepoId" :disabled="useNewRepoForImport" class="glass-select import-select">
+                  <option v-for="r in storage.repositories.value" :key="r.id" :value="r.id">{{ r.name }}</option>
+                </select>
+                <label class="import-checkbox-label">
+                  <input type="checkbox" v-model="useNewRepoForImport" /> 新建分类仓库导入
+                </label>
+              </div>
+            </div>
+
+            <!-- 新建分类仓库输入项 -->
+            <Transition name="expand">
+              <div class="form-group-item import-new-repo-group" v-if="useNewRepoForImport">
+                <label class="form-item-label">新建分类仓库名称：</label>
+                <input 
+                  v-model="newImportRepoName" 
+                  placeholder="请输入新建仓库的名称，例如考研背诵"
+                  class="form-item-input"
+                  maxlength="20"
+                />
+              </div>
+            </Transition>
+
+            <div class="form-group-item">
+              <label class="form-item-label">材料文件格式：</label>
+              <div class="import-radio-group">
+                <label class="import-radio-label">
+                  <input type="radio" value="txt" v-model="importFileType" /> 纯文本 TXT (每行一句 / 支持以'|'分隔翻译)
+                </label>
+                <label class="import-radio-label">
+                  <input type="radio" value="csv" v-model="importFileType" /> CSV 表格文本 (原句,翻译 / 原句|翻译)
+                </label>
+              </div>
+            </div>
+
+            <!-- 模板下载操作行 -->
+            <div class="form-group-item">
+              <label class="form-item-label">获取参考模板：</label>
+              <div class="template-download-row">
+                <button @click="handleDownloadTemplate('txt')" class="template-download-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="template-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  下载 TXT 模板
+                </button>
+                <button @click="handleDownloadTemplate('csv')" class="template-download-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="template-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  下载 CSV 模板
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group-item">
+              <label class="form-item-label">输入或粘贴文本内容：</label>
+              <textarea 
+                v-model="importText" 
+                placeholder="格式示例：&#10;The antigravity system is cool. | 反重力系统太酷了。&#10;Keep coding and keep learning. | 不断编程，持续学习。&#10;每行一个句子，翻译部分若省略则系统会在导入时自动在线联网翻译！"
+                class="form-item-textarea import-textarea"
+                rows="6"
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- 解析中状态展示 -->
+          <div class="modal-body-form importing-status-body" v-else>
+            <div class="status-center">
+              <span class="status-spinner"></span>
+              <h4>系统正在智能抓取与解析词句中，请勿关闭窗口...</h4>
+              <p class="status-desc">
+                正在向云端拉取整句翻译、单词音标、分词解析并构建记忆卡片...
+              </p>
+              <div class="import-progress-bar-container">
+                <div class="import-progress-bar-fill" :style="{ width: `${Math.round((importProgressCurrent / importProgressTotal) * 100)}%` }"></div>
+              </div>
+              <span class="progress-ratio">
+                {{ importProgressCurrent }} / {{ importProgressTotal }} ({{ Math.round((importProgressCurrent / importProgressTotal) * 100) }}%)
+              </span>
+            </div>
+          </div>
+
+          <div class="modal-footer" v-if="!importing">
+            <button class="modal-btn cancel" @click="showImportModal = false">取消</button>
+            <button class="modal-btn confirm" :disabled="!importText.trim() || (useNewRepoForImport && !newImportRepoName.trim())" @click="handleImportTextSubmit">开始智能解析并导入</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -940,7 +1233,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { check } from '@tauri-apps/plugin-updater';
-import { useStorage, type AppSettings } from './composables/useStorage';
+import { useStorage, type AppSettings, type StorageData, type Repository, type SentenceItem } from './composables/useStorage';
 import { useTTS } from './composables/useTTS';
 import { translateSentence, parseSentenceWords } from './services/youdao';
 import SentenceInput from './components/SentenceInput.vue';
@@ -1030,18 +1323,36 @@ const parsedResult = ref<{
   words: any[];
 } | null>(null);
 
+const selectedReviewRepoId = ref<string>('all'); // 复习页选择的仓库，默认全部
 // 用于计算复习轮次的基数
 const initialReviewQueueLength = ref(0);
 
 // 用于计算复习队列中的当前到期需要进行艾宾浩斯复习的句子队列
 const reviewQueue = computed(() => {
   return sentences.value.filter(item => {
+    // 必须是选定的仓库下的句子
+    const matchRepo = selectedReviewRepoId.value === 'all' ||
+                      (selectedReviewRepoId.value === 'default' && (!item.repoId || item.repoId === 'default')) ||
+                      item.repoId === selectedReviewRepoId.value;
     // 必须是学习中状态，且当前时间大于或等于计算出的下一次复习时间
-    return item.status === 'learning' && item.nextReviewTime <= Date.now();
+    return matchRepo && item.status === 'learning' && item.nextReviewTime <= Date.now();
   });
 });
 
 const reviewQueueCount = computed(() => reviewQueue.value.length);
+
+// 监听复习仓库过滤切换，重置并重新打乱随机复习队列
+watch(selectedReviewRepoId, () => {
+  if (isRandomReviewMode.value) {
+    const ids = reviewQueue.value.map(item => item.id);
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+    shuffledQueueIds.value = ids;
+  }
+  initialReviewQueueLength.value = reviewQueue.value.length;
+});
 
 // 获取复习队列中的当前第一个句子卡片 (支持随机模式映射)
 const currentReviewItem = computed(() => {
@@ -1192,12 +1503,13 @@ const handleToggleSaveCurrent = () => {
       storage.deleteSentence(found.id);
     }
   } else {
-    // 未收藏，则一键添加
+    // 未收藏，则一键添加，归入选中的目标仓库
     storage.addSentence(
       parsedResult.value.text,
       parsedResult.value.translation,
       parsedResult.value.phonetics,
-      parsedResult.value.words
+      parsedResult.value.words,
+      selectedSaveRepoId.value
     );
   }
 };
@@ -1283,7 +1595,10 @@ const resetToDefaultSettings = () => {
     audioTimeout: 5000,
     githubToken: '',
     githubGistId: '',
-    lastSyncedAt: 0
+    lastSyncedAt: 0,
+    aiEndpoint: '',
+    aiApiKey: '',
+    aiModel: ''
   };
   storage.saveSettings(DEFAULT_SETTINGS);
 };
@@ -1303,8 +1618,13 @@ const handleCreateGist = async () => {
 
   creatingGist.value = true;
   try {
-    // 上传本地当前最新的句子列表作为初始数据
-    const localDataStr = JSON.stringify(storage.sentences.value);
+    // 上传本地当前最新的句子列表和分类仓库作为初始数据
+    const localData: StorageData = {
+      version: 2,
+      repositories: storage.repositories.value,
+      sentences: storage.sentences.value
+    };
+    const localDataStr = JSON.stringify(localData);
     const gistId = await invoke<string>('github_create_gist_backend', {
       token,
       data: localDataStr
@@ -1339,18 +1659,67 @@ const handleSyncData = async () => {
     });
 
     let cloudSentences: any[] = [];
+    let cloudRepos: any[] = [];
+    
+    const defaultRepo: Repository = {
+      id: 'default',
+      name: '默认仓库',
+      createdAt: Date.now(),
+      isSystem: true
+    };
+
     try {
-      cloudSentences = JSON.parse(cloudDataStr);
+      const parsed = JSON.parse(cloudDataStr);
+      if (Array.isArray(parsed)) {
+        // 云端是老版本句子数组
+        cloudSentences = parsed;
+        cloudRepos = [defaultRepo];
+      } else if (parsed && typeof parsed === 'object') {
+        cloudSentences = parsed.sentences || [];
+        cloudRepos = parsed.repositories || [defaultRepo];
+        if (!cloudRepos.some(r => r.id === 'default')) {
+          cloudRepos.unshift(defaultRepo);
+        }
+      }
     } catch (parseErr) {
       console.warn('云端备份解析失败，可能文件为空，将自动以本地为主进行覆盖', parseErr);
+      cloudRepos = [defaultRepo];
     }
 
     // 2. 双端数据智能无损合并
-    const mergedMap = new Map<string, any>();
+    
+    // 合并仓库列表
+    const mergedReposMap = new Map<string, Repository>();
+    // 先塞入本地
+    storage.repositories.value.forEach(r => {
+      mergedReposMap.set(r.id, { ...r });
+    });
+    // 强制保持默认仓库的规范性
+    mergedReposMap.set('default', {
+      id: 'default',
+      name: '默认仓库',
+      createdAt: mergedReposMap.get('default')?.createdAt || Date.now(),
+      isSystem: true
+    });
+    
+    let cloudReposAddedCount = 0;
+    cloudRepos.forEach(cr => {
+      if (!mergedReposMap.has(cr.id)) {
+        mergedReposMap.set(cr.id, cr);
+        cloudReposAddedCount++;
+      } else if (cr.id !== 'default') {
+        // 若双端均有，合并属性，以较新的那个或者直接混合为准
+        const localRepo = mergedReposMap.get(cr.id)!;
+        mergedReposMap.set(cr.id, { ...localRepo, ...cr });
+      }
+    });
+
+    // 合并句子列表
+    const mergedSentencesMap = new Map<string, SentenceItem>();
 
     // 先塞入本地数据
     storage.sentences.value.forEach(s => {
-      mergedMap.set(s.id, { ...s });
+      mergedSentencesMap.set(s.id, { ...s, repoId: s.repoId || 'default' });
     });
 
     let cloudAddedCount = 0;
@@ -1358,26 +1727,34 @@ const handleSyncData = async () => {
 
     // 循环对比云端数据
     cloudSentences.forEach(cloudItem => {
-      const localItem = mergedMap.get(cloudItem.id);
+      const cleanCloudItem = { ...cloudItem, repoId: cloudItem.repoId || 'default' };
+      const localItem = mergedSentencesMap.get(cleanCloudItem.id);
       if (!localItem) {
         // 本地没有，云端有：直接拉下来
-        mergedMap.set(cloudItem.id, cloudItem);
+        mergedSentencesMap.set(cleanCloudItem.id, cleanCloudItem);
         cloudAddedCount++;
       } else {
         // 本地和云端都有：对比复习次数 (reviewCount) 选择最先进的那个版本，防止进度倒退
-        const cloudCount = cloudItem.reviewCount || 0;
+        const cloudCount = cleanCloudItem.reviewCount || 0;
         const localCount = localItem.reviewCount || 0;
         if (cloudCount > localCount) {
-          mergedMap.set(cloudItem.id, cloudItem);
+          mergedSentencesMap.set(cleanCloudItem.id, cleanCloudItem);
           localUpdatedCount++;
         }
       }
     });
 
-    const mergedList = Array.from(mergedMap.values());
+    const mergedRepos = Array.from(mergedReposMap.values());
+    const mergedSentences = Array.from(mergedSentencesMap.values());
 
     // 3. 将合并后的最终数据写回云端和本地
-    const mergedDataStr = JSON.stringify(mergedList);
+    const exportObj: StorageData = {
+      version: 2,
+      repositories: mergedRepos,
+      sentences: mergedSentences
+    };
+    const mergedDataStr = JSON.stringify(exportObj);
+    
     await invoke('github_write_gist_backend', {
       token,
       gistId,
@@ -1385,11 +1762,19 @@ const handleSyncData = async () => {
     });
 
     // 覆盖本地
-    storage.sentences.value = mergedList;
+    storage.repositories.value = mergedRepos;
+    storage.sentences.value = mergedSentences;
     localStorage.setItem('eapp_sentence_data', mergedDataStr);
 
     updateSetting('lastSyncedAt', Date.now());
-    alert(`🎉 云端数据智能同步成功！\n\n- 从云端增量合并了 ${cloudAddedCount} 个新句子\n- 根据云端进度更新了 ${localUpdatedCount} 个单词复习记录`);
+    
+    let alertMsg = `🎉 云端数据智能同步成功！\n\n`;
+    alertMsg += `- 从云端合并了 ${cloudAddedCount} 个新句子\n`;
+    alertMsg += `- 更新了 ${localUpdatedCount} 个句子复习记录\n`;
+    if (cloudReposAddedCount > 0) {
+      alertMsg += `- 从云端同步了 ${cloudReposAddedCount} 个分类仓库\n`;
+    }
+    alert(alertMsg);
   } catch (e) {
     console.error('智能同步失败:', e);
     alert(`❌ 同步失败:\n${e}`);
@@ -1413,7 +1798,12 @@ const handleForcePush = async () => {
 
   syncing.value = true;
   try {
-    const localDataStr = JSON.stringify(storage.sentences.value);
+    const localData: StorageData = {
+      version: 2,
+      repositories: storage.repositories.value,
+      sentences: storage.sentences.value
+    };
+    const localDataStr = JSON.stringify(localData);
     await invoke('github_write_gist_backend', {
       token,
       gistId,
@@ -1449,9 +1839,37 @@ const handleForcePull = async () => {
       gistId
     });
 
-    const cloudSentences = JSON.parse(cloudDataStr);
+    const parsed = JSON.parse(cloudDataStr);
+    let cloudSentences: SentenceItem[] = [];
+    let cloudRepos: Repository[] = [];
+    
+    const defaultRepo: Repository = {
+      id: 'default',
+      name: '默认仓库',
+      createdAt: Date.now(),
+      isSystem: true
+    };
+
+    if (Array.isArray(parsed)) {
+      cloudSentences = parsed.map(s => ({ ...s, repoId: 'default' }));
+      cloudRepos = [defaultRepo];
+    } else if (parsed && typeof parsed === 'object') {
+      cloudSentences = parsed.sentences || [];
+      cloudRepos = parsed.repositories || [defaultRepo];
+      if (!cloudRepos.some(r => r.id === 'default')) {
+        cloudRepos.unshift(defaultRepo);
+      }
+    }
+
     storage.sentences.value = cloudSentences;
-    localStorage.setItem('eapp_sentence_data', cloudDataStr);
+    storage.repositories.value = cloudRepos;
+    
+    const exportObj: StorageData = {
+      version: 2,
+      repositories: cloudRepos,
+      sentences: cloudSentences
+    };
+    localStorage.setItem('eapp_sentence_data', JSON.stringify(exportObj));
     updateSetting('lastSyncedAt', Date.now());
     alert('🎉 已强制从云端覆盖并更新本地句子库！');
   } catch (e) {
@@ -1537,6 +1955,28 @@ const runSpeedTest = async () => {
   }
 
   testingSpeed.value = false;
+};
+
+// 下载导入模板文件 (调用 Rust 原生 FileDialog 对话框，让用户自由选择路径另存为)
+const handleDownloadTemplate = async (type: 'txt' | 'csv') => {
+  let content = '';
+  let filename = '';
+  if (type === 'txt') {
+    content = `Keep it simple. | 保持简单。\nNever give up. | 永不放弃。\nPractice makes perfect. | 熟能生巧。`;
+    filename = 'eApp_TXT_Template.txt';
+  } else {
+    content = `"英文原句","中文翻译"\n"Actions speak louder than words.","行动胜于言语。"\n"Time flies.","时光飞逝。"\n"Every cloud has a silver lining.","守得云开见月明。"`;
+    filename = 'eApp_CSV_Template.csv';
+  }
+  
+  try {
+    const savedPath = await invoke<string>('save_template_file', { filename, content });
+    alert(`🎉 模板文件已成功下载保存至：\n${savedPath}`);
+  } catch (err) {
+    if (err !== '用户取消了保存') {
+      alert(`❌ 保存模板失败: ${err}`);
+    }
+  }
 };
 
 // 自动应用最佳接口配置
@@ -1652,6 +2092,259 @@ const startUpdating = async () => {
   }
 };
 
+// ==================== 多句子仓库与导入/批量管理逻辑 ====================
+const selectedRepoId = ref<string>('all'); // 当前选中的句子仓库，默认展示全部
+const selectedSaveRepoId = ref<string>('default'); // 在解析页面收藏时选择的仓库，默认是系统默认仓库
+
+// 新建仓库弹窗/输入状态
+const showCreateRepoModal = ref(false);
+const newRepoName = ref('');
+const newRepoDesc = ref('');
+
+// 重命名仓库状态
+const editingRepoId = ref<string | null>(null);
+const editingRepoName = ref('');
+
+// 批量管理状态
+const isBatchMode = ref(false);
+const selectedSentenceIds = ref<string[]>([]);
+const batchTargetRepoId = ref('');
+
+// 外部导入弹窗/解析队列状态
+const showImportModal = ref(false);
+const importTargetRepoId = ref('default');
+const newImportRepoName = ref('');
+const useNewRepoForImport = ref(false);
+const importFileType = ref<'txt' | 'csv'>('txt');
+const importText = ref('');
+const importProgressTotal = ref(0);
+const importProgressCurrent = ref(0);
+const importing = ref(false);
+
+// 仓库下句子的计算属性
+const filteredSentences = computed(() => {
+  if (selectedRepoId.value === 'all') {
+    return sentences.value;
+  }
+  return sentences.value.filter(s => {
+    if (selectedRepoId.value === 'default') {
+      return !s.repoId || s.repoId === 'default';
+    }
+    return s.repoId === selectedRepoId.value;
+  });
+});
+
+// 计算某个仓库下的句子总数
+const getRepoSentenceCount = (repoId: string) => {
+  if (repoId === 'all') return sentences.value.length;
+  return sentences.value.filter(s => {
+    if (repoId === 'default') return !s.repoId || s.repoId === 'default';
+    return s.repoId === repoId;
+  }).length;
+};
+
+// 新建分类仓库
+const handleCreateRepo = () => {
+  if (!newRepoName.value.trim()) {
+    alert('请输入仓库名称！');
+    return;
+  }
+  const repo = storage.createRepository(newRepoName.value, newRepoDesc.value);
+  selectedRepoId.value = repo.id;
+  newRepoName.value = '';
+  newRepoDesc.value = '';
+  showCreateRepoModal.value = false;
+};
+
+// 重命名分类仓库
+const handleRenameRepo = (repoId: string) => {
+  if (!editingRepoName.value.trim()) {
+    alert('仓库名称不能为空！');
+    return;
+  }
+  storage.renameRepository(repoId, editingRepoName.value);
+  editingRepoId.value = null;
+  editingRepoName.value = '';
+};
+
+// 删除分类仓库
+const handleDeleteRepo = (repoId: string) => {
+  if (repoId === 'default') return;
+  const repo = storage.repositories.value.find(r => r.id === repoId);
+  if (!repo) return;
+
+  const count = getRepoSentenceCount(repoId);
+  let msg = `⚠️ 确定要删除仓库【${repo.name}】吗？`;
+  if (count > 0) {
+    msg += `\n该仓库内目前有 ${count} 个句子。`;
+  }
+  
+  if (count === 0) {
+    if (confirm(msg)) {
+      storage.deleteRepository(repoId);
+      selectedRepoId.value = 'all';
+    }
+    return;
+  }
+
+  // 询问是连带删除句子还是移入默认仓库
+  const choices = confirm(`${msg}\n\n点击【确定】：保留该仓库内的句子，并自动将它们转移到【默认仓库】。\n点击【取消】：放弃删除操作。`);
+  if (choices) {
+    storage.deleteRepository(repoId, false);
+    selectedRepoId.value = 'all';
+    alert('仓库已删除，句子已成功搬家至默认仓库！');
+  }
+};
+
+// 触发批量模式切换
+const toggleBatchMode = () => {
+  isBatchMode.value = !isBatchMode.value;
+  selectedSentenceIds.value = [];
+  batchTargetRepoId.value = '';
+};
+
+// 勾选/反选句子
+const toggleSelectSentence = (id: string) => {
+  if (selectedSentenceIds.value.includes(id)) {
+    selectedSentenceIds.value = selectedSentenceIds.value.filter(sid => sid !== id);
+  } else {
+    selectedSentenceIds.value.push(id);
+  }
+};
+
+// 批量移动句子到指定仓库
+const handleBatchMove = () => {
+  if (selectedSentenceIds.value.length === 0) {
+    alert('请先勾选需要移动的句子！');
+    return;
+  }
+  if (!batchTargetRepoId.value) {
+    alert('请选择目标仓库！');
+    return;
+  }
+  storage.moveSentencesToRepository(selectedSentenceIds.value, batchTargetRepoId.value);
+  alert(`成功将 ${selectedSentenceIds.value.length} 个句子转移至目标仓库！`);
+  isBatchMode.value = false;
+  selectedSentenceIds.value = [];
+};
+
+// 批量删除句子
+const handleBatchDelete = () => {
+  if (selectedSentenceIds.value.length === 0) {
+    alert('请先勾选需要删除的句子！');
+    return;
+  }
+  if (confirm(`⚠️ 警告：确定要批量删除这 ${selectedSentenceIds.value.length} 个句子吗？该操作不可撤销！`)) {
+    storage.sentences.value = storage.sentences.value.filter(s => !selectedSentenceIds.value.includes(s.id));
+    storage.saveData();
+    alert('句子已成功批量删除！');
+    isBatchMode.value = false;
+    selectedSentenceIds.value = [];
+  }
+};
+
+// 外部材料批量导入后台解析流水线
+const handleImportTextSubmit = async () => {
+  if (!importText.value.trim()) {
+    alert('请输入导入材料内容！');
+    return;
+  }
+  
+  // 1. 决定目标仓库
+  let targetRepoId = importTargetRepoId.value;
+  if (useNewRepoForImport.value) {
+    if (!newImportRepoName.value.trim()) {
+      alert('请先输入新建仓库的名称！');
+      return;
+    }
+    const newRepo = storage.createRepository(newImportRepoName.value, '批量导入创建');
+    targetRepoId = newRepo.id;
+  }
+
+  // 2. 按行拆分数据，滤出非空行
+  const lines = importText.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0) {
+    alert('未检测到有效的句子行！');
+    return;
+  }
+
+  importing.value = true;
+  importProgressTotal.value = lines.length;
+  importProgressCurrent.value = 0;
+  
+  // 3. 构建临时队列
+  const settings = storage.settings.value;
+
+  // 启动串行导入队列
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let originalText = '';
+    let translationText = '';
+
+    // 解析格式
+    if (importFileType.value === 'csv') {
+      // 允许逗号或 "|" 作为分割线
+      let separator = ',';
+      if (line.includes('|')) {
+        separator = '|';
+      }
+      const parts = line.split(separator).map(p => p.trim());
+      originalText = parts[0] || '';
+      translationText = parts[1] || '';
+    } else {
+      // txt 格式：如果是 '英文原句 | 中文翻译' 格式
+      if (line.includes('|')) {
+        const parts = line.split('|').map(p => p.trim());
+        originalText = parts[0] || '';
+        translationText = parts[1] || '';
+      } else {
+        originalText = line;
+      }
+    }
+
+    if (!originalText) {
+      importProgressCurrent.value++;
+      continue;
+    }
+
+    try {
+      // 4. 调用接口或 AI 进行分词和翻译
+      let translation = translationText;
+      if (!translation) {
+        // 无翻译时，调用翻译 API 获取翻译
+        translation = await translateSentence(originalText, settings.translationProvider, settings.translationTimeout);
+      }
+      
+      // 拉取单词音标释义
+      const words = await parseSentenceWords(originalText, settings);
+      
+      // 生成整句连读音标
+      const list = words
+        .filter(w => w.phonetic && !w.phonetic.includes('无'))
+        .map(w => w.phonetic);
+      const phonetics = list.length > 0 ? `/[ ${list.join(' ')} ]/` : '';
+
+      // 5. 保存到仓库里
+      storage.addSentence(originalText, translation, phonetics, words, targetRepoId);
+    } catch (err) {
+      console.error(`解析单句导入失败: "${originalText}"`, err);
+      // 报错时使用默认兜底添加，翻译空着或放入错误提示，以防丢失数据
+      storage.addSentence(originalText, translationText || '翻译获取失败', '', [], targetRepoId);
+    }
+
+    importProgressCurrent.value++;
+    // 控制请求频率，每次插入缓冲 300ms
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
+  importing.value = false;
+  showImportModal.value = false;
+  importText.value = '';
+  newImportRepoName.value = '';
+  selectedRepoId.value = targetRepoId; // 切换查看新导入的仓库
+  alert(`🎉 批量材料导入解析完成！\n共成功导入了 ${importProgressTotal.value} 条英文难句。`);
+};
+
 // 辅助格式化时间
 const formatDate = (timestamp: number) => {
   return new Date(timestamp).toLocaleString('zh-CN', {
@@ -1677,6 +2370,711 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* ==================== 多句子仓库新版 UI 布局样式 ==================== */
+.repo-layout-container {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  gap: 20px;
+}
+
+.repo-sidebar-panel {
+  width: 260px;
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  backdrop-filter: blur(10px);
+  height: max-content;
+  max-height: calc(100vh - 120px);
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--glass-border);
+  padding-bottom: 10px;
+}
+
+.sidebar-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.add-repo-btn-mini {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--color-primary);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.add-repo-btn-mini:hover {
+  background: var(--color-primary);
+  color: white;
+}
+
+.repo-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  max-height: 400px;
+}
+
+.repo-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  position: relative;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+}
+
+.repo-menu-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.repo-menu-item.active {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.2);
+  color: var(--text-primary);
+}
+
+.repo-icon {
+  font-size: 1rem;
+}
+
+.repo-name-text {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.repo-badge-count {
+  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 99px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.repo-menu-item.active .repo-badge-count {
+  background: var(--color-primary);
+  color: white;
+}
+
+/* 侧边栏悬浮按钮 */
+.repo-item-actions {
+  position: absolute;
+  right: 8px;
+  display: none;
+  gap: 4px;
+  background: linear-gradient(95deg, transparent, rgba(15, 23, 42, 0.9) 20%);
+  padding-left: 20px;
+  height: 100%;
+  align-items: center;
+  top: 0;
+  border-top-right-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.repo-menu-item:hover .repo-item-actions {
+  display: flex;
+}
+
+.repo-action-mini {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.repo-action-mini:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.repo-action-mini.delete:hover {
+  background: rgba(244, 63, 94, 0.15);
+}
+
+.repo-rename-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--color-primary);
+  color: var(--text-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  outline: none;
+}
+
+/* 导入按钮 */
+.bulk-import-trigger-btn {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05));
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-top: auto;
+  text-align: center;
+}
+
+.bulk-import-trigger-btn:hover {
+  background: #10b981;
+  color: white;
+  box-shadow: 0 4px 12px 0 rgba(16, 185, 129, 0.2);
+}
+
+/* 右栏主展示区 */
+.repo-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* 批量管理操作条 */
+.batch-control-bar {
+  background: rgba(99, 102, 241, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  backdrop-filter: blur(5px);
+}
+
+.batch-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.batch-selected-count {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.batch-selected-count strong {
+  color: var(--color-primary);
+  font-size: 1rem;
+}
+
+.batch-action-link {
+  background: transparent;
+  border: none;
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.batch-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.batch-action-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.batch-repo-select {
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.batch-btn-exec {
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.batch-btn-exec.move {
+  background: var(--color-primary);
+  color: white;
+}
+
+.batch-btn-exec.move:disabled {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.batch-btn-exec.delete {
+  background: rgba(244, 63, 94, 0.15);
+  color: #f43f5e;
+}
+
+.batch-btn-exec.delete:hover {
+  background: #f43f5e;
+  color: white;
+}
+
+/* 句子多选复选框 */
+.repo-card-checkbox-col {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-right: 12px;
+  border-right: 1px dashed var(--glass-border);
+}
+
+.repo-card-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.sentence-repo-card.is-selected {
+  background: rgba(99, 102, 241, 0.03);
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+/* === 自定义高颜值模态框 (Overlay, Card) === */
+.custom-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.custom-modal-card {
+  position: relative;
+  width: 460px;
+  background: rgba(30, 30, 45, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 40px rgba(99, 102, 241, 0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: modalScale 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.custom-modal-card.import-card {
+  width: 600px;
+}
+
+.custom-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  z-index: 2;
+}
+
+.modal-headline {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+.modal-close-x {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.6rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.2s ease;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.modal-close-x:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.modal-body-form {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  z-index: 2;
+}
+
+.form-group-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-item-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.form-item-input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.form-item-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.15);
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.form-item-textarea {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.2s ease;
+  resize: vertical;
+}
+
+.form-item-textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.15);
+  background: rgba(0, 0, 0, 0.45);
+}
+
+/* 导入功能特定样式 */
+.import-repo-selector-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.import-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.import-new-repo-group {
+  background: rgba(255, 255, 255, 0.01);
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.import-radio-group {
+  display: flex;
+  gap: 20px;
+}
+
+.import-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.import-textarea {
+  font-family: monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+/* 模板下载组件 */
+.template-download-row {
+  display: flex;
+  gap: 16px;
+}
+
+.template-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #a5b4fc;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.template-download-btn:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.template-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* 解析中状态 */
+.importing-status-body {
+  padding: 40px 24px !important;
+}
+
+.status-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.status-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.05);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.status-center h4 {
+  margin-top: 20px;
+  margin-bottom: 0;
+  font-size: 1.05rem;
+  color: #f8fafc;
+}
+
+.status-desc {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  max-width: 80%;
+}
+
+.import-progress-bar-container {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 24px;
+}
+
+.import-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), #10b981);
+  transition: width 0.1s ease-out;
+}
+
+.progress-ratio {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+/* 模态框底部按钮区 */
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  background: rgba(0, 0, 0, 0.15);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  z-index: 2;
+}
+
+.modal-btn {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.modal-btn.cancel {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.modal-btn.cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.modal-btn.confirm {
+  background: var(--color-primary);
+  color: white;
+}
+
+.modal-btn.confirm:hover:not(:disabled) {
+  background: var(--color-primary-hover, #4f46e5);
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.35);
+  transform: translateY(-1px);
+}
+
+.modal-btn.confirm:disabled {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+/* === 全局高颜值磨砂玻璃下拉选 === */
+.glass-select, .batch-repo-select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a5b4fc' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 14px !important;
+  padding: 8px 36px 8px 14px !important;
+  background-color: rgba(15, 15, 25, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  color: #e2e8f0 !important;
+  font-size: 0.85rem !important;
+  outline: none !important;
+  cursor: pointer !important;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1) !important;
+}
+
+.glass-select:focus, .batch-repo-select:focus {
+  border-color: rgba(99, 102, 241, 0.5) !important;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.25) !important;
+  background-color: rgba(15, 15, 25, 0.6) !important;
+}
+
+.glass-select:disabled, .batch-repo-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.glass-select option, .batch-repo-select option {
+  background-color: #1a1a2b !important;
+  color: #e2e8f0 !important;
+  padding: 8px !important;
+}
+
+/* 界面下拉选辅助样式 */
+.save-repo-selector-row {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.save-repo-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.review-filter-row {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid var(--glass-border);
+  padding: 10px 18px;
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.review-repo-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.review-repo-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.meta-repo-tag {
+  background: rgba(99, 102, 241, 0.1);
+  color: #a5b4fc;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
 .app-window {
   width: 100%;
   height: 100%;

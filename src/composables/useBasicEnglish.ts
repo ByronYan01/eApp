@@ -21,6 +21,7 @@ export interface ChallengeQuestion {
   id: number;
   type: 'blocks' | 'rewrite';
   chinese: string;
+  original?: string;    // 原始常规英语表达 (含超纲词)
   target: string;       // 目标英文句子
   words: string[];      // 用于积木的正确单词列表
   distractors: string[]; // 干扰词列表
@@ -191,7 +192,7 @@ export function useBasicEnglish() {
     
     // 构建系统提示词，强制大模型必须生成符合格式的 JSON 并限制 850 词汇
     const systemPrompt = `你是一个资深的 Basic English（基本英语）教学助教。你必须非常熟悉由 C.K.Ogden 定义的 850 个基本单词。
-你的任务是为用户生成 3 道关于【\${theme || '日常沟通'\}】主题的造句练习题。
+你的任务是为用户生成 3 道关于【${theme || '日常沟通'}】主题的造句练习题。
 
 【题型约束】
 请生成两种题型：
@@ -229,7 +230,7 @@ export function useBasicEnglish() {
   }
 ]`;
 
-    const prompt = `请生成 3 道与主题【\${theme || '日常沟通'\}】相关的练习题，包含 blocks 和 rewrite 题型。`;
+    const prompt = `请生成 3 道与主题【${theme || '日常沟通'}】相关的练习题，包含 blocks 和 rewrite 题型。`;
 
     try {
       const channel = new Channel<string>();

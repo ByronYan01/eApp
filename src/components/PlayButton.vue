@@ -2,9 +2,10 @@
   <div class="play-btn-container">
     <button 
       class="play-btn" 
-      :class="{ 'playing': isPlaying, 'uk': type === 'UK' }"
+      :class="{ 'playing': isPlaying, 'uk': type === 'UK', 'loading': isLoading }"
+      :disabled="isLoading"
       @click.stop="$emit('play')"
-      :title="`播放${type === 'US' ? '美音' : '英音'}`"
+      :title="isLoading ? '正在加载发音...' : `播放${type === 'US' ? '美音' : '英音'}`"
     >
       <!-- 动态声波环形涟漪效果 (仅在播放时展示) -->
       <span v-if="isPlaying" class="ripple-orb r1"></span>
@@ -12,7 +13,8 @@
       
       <!-- 精美播放 SVG 图标 -->
       <div class="icon-wrapper">
-        <svg v-if="!isPlaying" class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+        <span v-if="isLoading" class="play-loading-spinner">⌛</span>
+        <svg v-else-if="!isPlaying" class="play-icon" viewBox="0 0 24 24" fill="currentColor">
           <path d="M8 5v14l11-7z"/>
         </svg>
         <!-- 播放中的动态声波波纹柱状图 (微动效) -->
@@ -35,6 +37,10 @@
  */
 defineProps({
   isPlaying: {
+    type: Boolean,
+    default: false
+  },
+  isLoading: {
     type: Boolean,
     default: false
   },
@@ -190,5 +196,34 @@ defineEmits(['play']);
 
 .accent-tag.uk {
   color: #a7f3d0; /* 英音淡绿色 */
+}
+
+/* 详情播放按钮沙漏加载旋转 */
+.play-loading-spinner {
+  display: inline-block;
+  animation: spin 1.2s linear infinite;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: white;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 详情播放按钮禁用加载中样式 */
+.play-btn.loading {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+  animation: play-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes play-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 0.9; }
+  100% { opacity: 0.6; }
 }
 </style>

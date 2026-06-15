@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 
 
@@ -333,9 +335,32 @@ async fn get_phonetic_from_dict_backend(word: String) -> Result<String, String> 
     Ok(result)
 }
 
+// 声明全局在线真人发音音频缓存：键为 "{accent}:{lowercase_text}"，值为 Base64 MP3 字符串
+static AUDIO_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+
+fn get_cached_audio(key: &str) -> Option<String> {
+    let cache = AUDIO_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let map = cache.lock().unwrap();
+    map.get(key).cloned()
+}
+
+fn set_cached_audio(key: String, value: String) {
+    let cache = AUDIO_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut map = cache.lock().unwrap();
+    map.insert(key, value);
+}
+
 // 4. 多级级联在线真人原声 TTS 代理命令 (支持有道、谷歌、百度发音的动态主次切换与无缝故障兜底)
 #[tauri::command]
 async fn get_online_audio_backend(text: String, accent: String, provider: String, timeout_ms: Option<u64>) -> Result<String, String> {
+    let clean_text = text.trim().to_lowercase();
+    let cache_key = format!("{}:{}", accent, clean_text);
+
+    // 1. 优先从内存缓存中获取，如果是重复播放，实现瞬时响应
+    if let Some(b64_audio) = get_cached_audio(&cache_key) {
+        return Ok(b64_audio);
+    }
+
     let timeout = timeout_ms.unwrap_or(5000);
     let client = get_http_client(timeout)?;
     
@@ -421,7 +446,12 @@ async fn get_online_audio_backend(text: String, accent: String, provider: String
     if let Some(bytes) = audio_bytes {
         use base64::{Engine as _, engine::general_purpose::STANDARD};
         let b64 = STANDARD.encode(&bytes);
-        return Ok(format!("data:audio/mp3;base64,{}", b64));
+        let result = format!("data:audio/mp3;base64,{}", b64);
+
+        // 2. 存入内存缓存
+        set_cached_audio(cache_key, result.clone());
+
+        return Ok(result);
     }
     
     Err("未能从任何真人发音 API 获取到音频数据，请检查您的网络连接。".to_string())
@@ -729,6 +759,22 @@ async fn call_private_ai_stream(
 }
 
 
+#[tauri::command]
+fn save_template_file(filename: String, content: String) -> Result<String, String> {
+    let file_path = rfd::FileDialog::new()
+        .set_file_name(&filename)
+        .save_file();
+        
+    if let Some(path) = file_path {
+        std::fs::write(&path, content)
+            .map_err(|e| format!("写入文件失败: {}", e))?;
+        Ok(path.to_string_lossy().to_string())
+    } else {
+        Err("用户取消了保存".to_string())
+    }
+}
+
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -744,7 +790,8 @@ pub fn run() {
             github_read_gist_backend,
             github_write_gist_backend,
             call_private_ai,
-            call_private_ai_stream
+            call_private_ai_stream,
+            save_template_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

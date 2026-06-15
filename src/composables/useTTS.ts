@@ -13,6 +13,8 @@ let currentAudio: HTMLAudioElement | null = null;
  */
 export function useTTS() {
   const isPlaying = ref(false);
+  const isLoading = ref(false);
+  const errorMessage = ref('');
   const currentAccent = ref<AccentType>('US');
   const playRate = ref(1.0); // 播放语速
 
@@ -35,12 +37,17 @@ export function useTTS() {
 
     // 2. 停止在线 Audio 播放
     if (currentAudio) {
+      // 关键：清空事件监听器，避免在 src 清空时误触发 onerror 回调
+      currentAudio.onended = null;
+      currentAudio.onerror = null;
       currentAudio.pause();
       currentAudio.src = '';
       currentAudio = null;
     }
 
     isPlaying.value = false;
+    isLoading.value = false;
+    errorMessage.value = '';
   };
 
   /**
@@ -59,8 +66,14 @@ export function useTTS() {
     provider: string = 'auto',
     timeoutMs: number = 5000
   ) => {
+    if (isLoading.value) {
+      // 在线加载中禁止重复发起请求，防刷与限频保护
+      return;
+    }
+
     // 先停止当前正在播放的声音，避免混音重叠
     stop();
+    errorMessage.value = '';
 
     if (!text.trim()) return;
 
@@ -77,7 +90,8 @@ export function useTTS() {
    * 在线真人原声播放核心逻辑 (调用 Rust 后端级联多引擎代理服务，规避 Webview 跨域和防盗链)
    */
   const playOnline = async (text: string, accent: AccentType, rate: number, provider: string = 'auto', timeoutMs: number = 5000) => {
-    isPlaying.value = true;
+    isLoading.value = true;
+    isPlaying.value = false; // 加载期间不处于播放状态
     currentAccent.value = accent;
     playRate.value = rate; // 同步当前语速
 
@@ -101,16 +115,31 @@ export function useTTS() {
       currentAudio.onerror = (e) => {
         console.error('在线真人原声播放失败:', e);
         isPlaying.value = false;
+        isLoading.value = false;
         currentAudio = null;
-        alert('⚠️ 在线真人发音播放失败，请检查网络连接是否正常。\n若您目前处于离线或断网状态，建议前往【系统设置】页面，将【发音音频源】切换为【系统本地发音】。');
+        errorMessage.value = '播放失败，请稍后重试。';
       };
 
+      // 异步等待音频真正开始播放，成功 resolve 后再解除 loading
       await currentAudio.play();
-    } catch (err) {
+      
+      isLoading.value = false;
+      isPlaying.value = true;
+    } catch (err: any) {
+      // 忽略因主动暂停或打断引起的 AbortError (属于正常的发音切换/切歌操作)
+      let isAbort = false;
+      if (err && (err.name === 'AbortError' || err.message?.includes('interrupted') || err.message?.includes('pause'))) {
+        isAbort = true;
+      }
+
       console.error('在线真人原声代理播放失败:', err);
+      isLoading.value = false;
       isPlaying.value = false;
       currentAudio = null;
-      alert(`⚠️ 真人发音获取失败: ${err}\n如处于离线状态，建议前往【系统设置】切换为【系统本地发音】。`);
+
+      if (!isAbort) {
+        errorMessage.value = '网络请求超时或获取失败，请重试。';
+      }
     }
   };
 
@@ -183,6 +212,8 @@ export function useTTS() {
 
   return {
     isPlaying,
+    isLoading,
+    errorMessage,
     currentAccent,
     playRate,
     play,

@@ -8,6 +8,15 @@ export interface WordDetail {
   explain: string;
 }
 
+// 仓库定义接口
+export interface Repository {
+  id: string;            // 唯一标识。系统默认仓库固定为 'default'
+  name: string;          // 仓库名称
+  createdAt: number;     // 创建时间戳
+  description?: string;  // 仓库说明/备注
+  isSystem?: boolean;    // 是否为系统内置仓库（内置的默认仓库不可删除）
+}
+
 // 句子项完整数据结构
 export interface SentenceItem {
   id: string;
@@ -19,6 +28,14 @@ export interface SentenceItem {
   status: 'learning' | 'mastered';
   reviewCount: number; // 已通过复习的次数
   nextReviewTime: number; // 下次复习的时间戳
+  repoId?: string; // 所属仓库ID。若为空或不存在，则隐式归属为 'default'
+}
+
+// 整体持久化存储结构
+export interface StorageData {
+  version: number;
+  repositories: Repository[];
+  sentences: SentenceItem[];
 }
 
 // 复习打卡历史日志接口
@@ -73,6 +90,7 @@ const REVIEW_INTERVALS = [0, 30, 720, 1440, 2880, 5760, 10080, 21600];
 
 export function useStorage() {
   const sentences = ref<SentenceItem[]>([]);
+  const repositories = ref<Repository[]>([]);
   const settings = ref<AppSettings>({ ...DEFAULT_SETTINGS });
   const reviewLogs = ref<ReviewLog[]>([]);
 
@@ -82,14 +100,46 @@ export function useStorage() {
   const loadData = () => {
     try {
       const dataStr = localStorage.getItem(STORAGE_KEY);
+      const defaultRepo: Repository = {
+        id: 'default',
+        name: '默认仓库',
+        createdAt: Date.now(),
+        isSystem: true
+      };
+
       if (dataStr) {
-        sentences.value = JSON.parse(dataStr);
+        const parsed = JSON.parse(dataStr);
+        if (Array.isArray(parsed)) {
+          // 老版本兼容逻辑：原本是句子数组
+          sentences.value = parsed.map(item => ({ ...item, repoId: 'default' }));
+          repositories.value = [defaultRepo];
+          saveData(); // 立即写回新版格式
+        } else if (parsed && typeof parsed === 'object') {
+          // 新版本格式
+          sentences.value = parsed.sentences || [];
+          repositories.value = parsed.repositories || [defaultRepo];
+          
+          // 兜底：如果新版本中没有默认仓库，强行加入
+          if (!repositories.value.some(r => r.id === 'default')) {
+            repositories.value.unshift(defaultRepo);
+          }
+        } else {
+          sentences.value = [];
+          repositories.value = [defaultRepo];
+        }
       } else {
         sentences.value = [];
+        repositories.value = [defaultRepo];
       }
     } catch (e) {
       console.error('加载本地句子数据失败:', e);
       sentences.value = [];
+      repositories.value = [{
+        id: 'default',
+        name: '默认仓库',
+        createdAt: Date.now(),
+        isSystem: true
+      }];
     }
 
     try {
@@ -142,7 +192,12 @@ export function useStorage() {
    */
   const saveData = () => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sentences.value));
+      const exportObj: StorageData = {
+        version: 2,
+        repositories: repositories.value,
+        sentences: sentences.value
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(exportObj));
     } catch (e) {
       console.error('保存句子数据失败:', e);
     }
@@ -161,7 +216,8 @@ export function useStorage() {
     text: string,
     translation: string,
     phonetics: string,
-    words: WordDetail[]
+    words: WordDetail[],
+    repoId: string = 'default'
   ): SentenceItem => {
     const newItem: SentenceItem = {
       id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
@@ -172,12 +228,82 @@ export function useStorage() {
       addedAt: Date.now(),
       status: 'learning',
       reviewCount: 0,
-      nextReviewTime: Date.now() // 新增的句子默认立即需要学习/复习
+      nextReviewTime: Date.now(), // 新增的句子默认立即需要学习/复习
+      repoId
     };
 
     sentences.value.unshift(newItem); // 插入到最前
     saveData();
     return newItem;
+  };
+
+  /**
+   * 5.1 创建新仓库
+   */
+  const createRepository = (name: string, description?: string): Repository => {
+    const newRepo: Repository = {
+      id: 'repo_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+      name: name.trim(),
+      createdAt: Date.now(),
+      description
+    };
+    repositories.value.push(newRepo);
+    saveData();
+    return newRepo;
+  };
+
+  /**
+   * 5.2 删除仓库
+   * @param repoId 仓库ID
+   * @param deleteSentences 是否同时删除仓库下的句子。若为 false，则将句子转移到 'default' 默认仓库下
+   */
+  const deleteRepository = (repoId: string, deleteSentences: boolean = false) => {
+    if (repoId === 'default') return; // 默认仓库不允许删除
+    
+    // 删除仓库定义
+    repositories.value = repositories.value.filter(r => r.id !== repoId);
+    
+    if (deleteSentences) {
+      // 同时删除底下的所有句子
+      sentences.value = sentences.value.filter(s => s.repoId !== repoId);
+    } else {
+      // 否则将句子搬到默认仓库
+      sentences.value = sentences.value.map(s => {
+        if (s.repoId === repoId) {
+          return { ...s, repoId: 'default' };
+        }
+        return s;
+      });
+    }
+    saveData();
+  };
+
+  /**
+   * 5.3 重命名仓库
+   */
+  const renameRepository = (repoId: string, newName: string, description?: string) => {
+    if (repoId === 'default') return; // 默认仓库不可重命名
+    const repo = repositories.value.find(r => r.id === repoId);
+    if (repo) {
+      repo.name = newName.trim();
+      if (description !== undefined) {
+        repo.description = description;
+      }
+      saveData();
+    }
+  };
+
+  /**
+   * 5.4 批量将句子移动至指定仓库
+   */
+  const moveSentencesToRepository = (sentenceIds: string[], targetRepoId: string) => {
+    sentences.value = sentences.value.map(s => {
+      if (sentenceIds.includes(s.id)) {
+        return { ...s, repoId: targetRepoId };
+      }
+      return s;
+    });
+    saveData();
   };
 
   /**
@@ -252,7 +378,12 @@ export function useStorage() {
    */
   const exportData = () => {
     try {
-      const dataStr = JSON.stringify(sentences.value, null, 2);
+      const exportObj: StorageData = {
+        version: 2,
+        repositories: repositories.value,
+        sentences: sentences.value
+      };
+      const dataStr = JSON.stringify(exportObj, null, 2);
       const blob = new Blob([dataStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       
@@ -278,10 +409,43 @@ export function useStorage() {
         try {
           const imported = JSON.parse(e.target?.result as string);
           if (Array.isArray(imported)) {
-            // 简单校验数据结构
+            // 兼容导入旧版本的扁平句子数组
             const isValid = imported.every(item => item.id && item.text && item.translation);
             if (isValid) {
-              sentences.value = imported;
+              sentences.value = imported.map(item => ({ ...item, repoId: 'default' }));
+              repositories.value = [{
+                id: 'default',
+                name: '默认仓库',
+                createdAt: Date.now(),
+                isSystem: true
+              }];
+              saveData();
+              resolve(true);
+              return;
+            }
+          } else if (imported && typeof imported === 'object') {
+            // 新版 StorageData 格式
+            const isValid = Array.isArray(imported.sentences) && 
+                            imported.sentences.every((item: any) => item.id && item.text && item.translation);
+            if (isValid) {
+              sentences.value = imported.sentences;
+              repositories.value = imported.repositories || [{
+                id: 'default',
+                name: '默认仓库',
+                createdAt: Date.now(),
+                isSystem: true
+              }];
+              
+              // 兜底：如果缺少默认仓库，则强行加入
+              if (!repositories.value.some(r => r.id === 'default')) {
+                repositories.value.unshift({
+                  id: 'default',
+                  name: '默认仓库',
+                  createdAt: Date.now(),
+                  isSystem: true
+                });
+              }
+              
               saveData();
               resolve(true);
               return;
@@ -299,16 +463,22 @@ export function useStorage() {
 
   return {
     sentences,
+    repositories,
     settings,
     reviewLogs,
     loadData,
     loadSettings,
     saveSettings,
     addSentence,
+    createRepository,
+    deleteRepository,
+    renameRepository,
+    moveSentencesToRepository,
     deleteSentence,
     updateReviewProgress,
     toggleStatus,
     exportData,
-    importData
+    importData,
+    saveData
   };
 }
