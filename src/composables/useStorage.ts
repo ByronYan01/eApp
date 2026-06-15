@@ -1,4 +1,6 @@
 import { ref } from 'vue';
+import basicDictData from '../assets/basic_english_850.json';
+
 
 // 单词拆解项接口
 export interface WordDetail {
@@ -461,6 +463,60 @@ export function useStorage() {
     });
   };
 
+  /**
+   * 11. 一键重置/覆盖更新官方850分类仓库下的句子
+   */
+  const resetOfficial850Sentences = () => {
+    // 1. 确保存在 'basic_850' 仓库
+    const repoExists = repositories.value.some(r => r.id === 'basic_850');
+    if (!repoExists) {
+      repositories.value.push({
+        id: 'basic_850',
+        name: '极简英语 850',
+        createdAt: Date.now(),
+        description: '官方850个单词地道日常例句特训库',
+        isSystem: false
+      });
+    }
+
+    // 2. 清理掉原有所有官方850句子（包括旧库数据或以 basic_850_ 开头的官方ID）
+    sentences.value = sentences.value.filter(s => s.repoId !== 'basic_850' && !s.id.startsWith('basic_850_'));
+
+    // 3. 重新插入全新的 850 个例句
+    Object.keys(basicDictData).forEach(word => {
+      const info = (basicDictData as any)[word];
+      const en = info.example || '';
+      const cn = info.example_zh || '';
+      if (!en) return;
+
+      const phonetic = info.phonetic_us || info.phonetic_uk || '';
+      
+      const newItem: SentenceItem = {
+        id: `basic_850_${word.toLowerCase().trim()}`,
+        text: en.trim(),
+        translation: cn.trim(),
+        phonetics: phonetic ? `/[ ${phonetic} ]/` : '',
+        words: [
+          {
+            original: word,
+            clean: word.toLowerCase().trim(),
+            phonetic: phonetic,
+            explain: info.explain || ''
+          }
+        ],
+        addedAt: Date.now(),
+        status: 'learning',
+        reviewCount: 0,
+        nextReviewTime: Date.now(),
+        repoId: 'basic_850'
+      };
+      sentences.value.push(newItem);
+    });
+
+    // 4. 保存数据
+    saveData();
+  };
+
   return {
     sentences,
     repositories,
@@ -479,6 +535,8 @@ export function useStorage() {
     toggleStatus,
     exportData,
     importData,
+    resetOfficial850Sentences,
     saveData
   };
 }
+

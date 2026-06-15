@@ -230,6 +230,10 @@
                   <button class="bulk-import-trigger-btn" @click="showImportModal = true">
                     📥 批量导入学习材料
                   </button>
+                  <!-- 一键重构官方 850 例句库 -->
+                  <button class="reset-850-trigger-btn" @click="handleReset850">
+                    🔄 重构 850 官方例句库
+                  </button>
                 </div>
 
                 <!-- 右栏：句子展示流 -->
@@ -2345,6 +2349,26 @@ const handleImportTextSubmit = async () => {
   alert(`🎉 批量材料导入解析完成！\n共成功导入了 ${importProgressTotal.value} 条英文难句。`);
 };
 
+// 一键重构官方 850 例句库
+const handleReset850 = async () => {
+  const confirmMsg = '⚠️ 警告：您确定要重新生成并覆盖【极简英语 850】官方仓库吗？\n\n' + 
+                     '1. 这将采用最新、最实用的日常地道例句。\n' +
+                     '2. 会清除原 850 仓库里的句子和复习进度。\n' +
+                     '3. 您自己在默认仓库或其它仓库收藏的句子会 100% 完好保留！';
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+  
+  try {
+    storage.resetOfficial850Sentences();
+    selectedRepoId.value = 'basic_850'; // 切换查看新更新的仓库
+    alert('🎉 官方 850 日常例句库已在本地重新重构装载完成！\n建议您接着去【数据同步】中强制覆盖云端备份，使多端保持一致。');
+  } catch (err) {
+    console.error('重构官方850例句库失败:', err);
+    alert('❌ 重构失败: ' + err);
+  }
+};
+
 // 辅助格式化时间
 const formatDate = (timestamp: number) => {
   return new Date(timestamp).toLocaleString('zh-CN', {
@@ -2548,6 +2572,27 @@ onMounted(async () => {
   background: #10b981;
   color: white;
   box-shadow: 0 4px 12px 0 rgba(16, 185, 129, 0.2);
+}
+
+/* 重构850按钮 */
+.reset-850-trigger-btn {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(99, 102, 241, 0.05));
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-top: 8px;
+  text-align: center;
+}
+
+.reset-850-trigger-btn:hover {
+  background: #6366f1;
+  color: white;
+  box-shadow: 0 4px 12px 0 rgba(99, 102, 241, 0.2);
 }
 
 /* 右栏主展示区 */
