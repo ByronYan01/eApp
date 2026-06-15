@@ -1242,6 +1242,7 @@ import ReviewCard from './components/ReviewCard.vue';
 import InteractiveSentence from './components/InteractiveSentence.vue';
 import DashboardView from './components/DashboardView.vue';
 import BasicEnglishView from './components/BasicEnglishView.vue';
+import basicDictData from './assets/basic_english_850.json';
 
 // 页面 Tab 选项配置 (新增“系统设置”选项，配置高颜值极简 SVG)
 const tabs = [
@@ -2358,6 +2359,71 @@ const formatDate = (timestamp: number) => {
 // 生命周期钩子：挂载时加载本地持久化数据并配置复习队列基数
 onMounted(async () => {
   loadData();
+
+  // ================= 自动清理 850 单词例句数据，保留原始 22 句 =================
+  try {
+    const cleanedFlag = localStorage.getItem('eapp_cleaned_850_words_default_v2');
+    if (!cleanedFlag && storage.sentences.value.length > 50) {
+      // 1. 收集 850 个单词的所有例句原文
+      const basicSentenceSet = new Set<string>();
+      const cleanText = (txt: string) => txt.toLowerCase().trim().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'’]/g, "").replace(/\s+/g, " ");
+      
+      for (const key in basicDictData) {
+        const wordInfo = (basicDictData as any)[key];
+        if (wordInfo && wordInfo.example) {
+          basicSentenceSet.add(cleanText(wordInfo.example));
+        }
+      }
+      
+      // 2. 过滤本地 sentences，仅删除默认仓库中属于 850 词例句的项目
+      const originalCount = storage.sentences.value.length;
+      const filteredSentences = storage.sentences.value.filter(s => {
+        const isDefaultRepo = !s.repoId || s.repoId === 'default';
+        if (isDefaultRepo) {
+          const cleanedS = cleanText(s.text);
+          if (basicSentenceSet.has(cleanedS)) {
+            return false;
+          }
+        }
+        return true;
+      });
+      
+      const deletedCount = originalCount - filteredSentences.length;
+      if (deletedCount > 0) {
+        console.log(`[eApp Clean] 自动清理了默认仓库中的 ${deletedCount} 个 850 词例句。`);
+        storage.sentences.value = filteredSentences;
+        storage.saveData(); // 持久化写入本地
+        
+        // 3. 自动触发强推云端，覆盖 Gist 上的 850 单词例句残留
+        const token = storage.settings.value.githubToken.trim();
+        const gistId = storage.settings.value.githubGistId.trim();
+        if (token && gistId) {
+          try {
+            const localData = {
+              version: 2,
+              repositories: storage.repositories.value,
+              sentences: storage.sentences.value
+            };
+            await invoke('github_write_gist_backend', {
+              token,
+              gistId,
+              data: JSON.stringify(localData)
+            });
+            console.log("[eApp Clean] 自动覆盖云端 Gist 成功！");
+          } catch (gistErr) {
+            console.error("[eApp Clean] 自动覆盖云端 Gist 失败:", gistErr);
+          }
+        }
+      }
+      
+      // 标记已完成清理，防止此后二次执行
+      localStorage.setItem('eapp_cleaned_850_words_default_v2', 'true');
+    }
+  } catch (cleanErr) {
+    console.error('自动清理 850 单词数据失败:', cleanErr);
+  }
+  // =========================================================================
+
   initialReviewQueueLength.value = reviewQueue.value.length;
   try {
     appVersion.value = await getVersion();
