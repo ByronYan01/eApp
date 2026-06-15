@@ -1242,7 +1242,8 @@ import ReviewCard from './components/ReviewCard.vue';
 import InteractiveSentence from './components/InteractiveSentence.vue';
 import DashboardView from './components/DashboardView.vue';
 import BasicEnglishView from './components/BasicEnglishView.vue';
-import basicDictData from './assets/basic_english_850.json';
+
+
 
 // 页面 Tab 选项配置 (新增“系统设置”选项，配置高颜值极简 SVG)
 const tabs = [
@@ -2360,67 +2361,7 @@ const formatDate = (timestamp: number) => {
 onMounted(async () => {
   loadData();
 
-  // ================= 自动清理今日误导入默认仓库的数据，保留原始收藏句 =================
-  try {
-    const cleanedFlag = localStorage.getItem('eapp_cleaned_today_default_v4');
-    if (!cleanedFlag && storage.sentences.value.length > 0) {
-      // 1. 获取今天 (本地时间) 的起止时间戳范围
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayStartTs = todayStart.getTime();
-      
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-      const todayEndTs = todayEnd.getTime();
 
-      // 2. 过滤掉默认仓库中添加时间为今天的句子
-      const originalCount = storage.sentences.value.length;
-      const filteredSentences = storage.sentences.value.filter(s => {
-        const isDefaultRepo = !s.repoId || s.repoId === 'default';
-        if (isDefaultRepo) {
-          const addedAt = s.addedAt || 0;
-          if (addedAt >= todayStartTs && addedAt <= todayEndTs) {
-            return false; // 添加时间在今天之内，则删除
-          }
-        }
-        return true;
-      });
-      
-      const deletedCount = originalCount - filteredSentences.length;
-      if (deletedCount > 0) {
-        console.log(`[eApp Clean] 自动清理了默认仓库中今天新增的 ${deletedCount} 个句子。`);
-        storage.sentences.value = filteredSentences;
-        storage.saveData(); // 保存至本地 LocalStorage
-        
-        // 3. 自动同步强推至云端
-        const token = storage.settings.value.githubToken.trim();
-        const gistId = storage.settings.value.githubGistId.trim();
-        if (token && gistId) {
-          try {
-            const localData = {
-              version: 2,
-              repositories: storage.repositories.value,
-              sentences: storage.sentences.value
-            };
-            await invoke('github_write_gist_backend', {
-              token,
-              gistId,
-              data: JSON.stringify(localData)
-            });
-            console.log("[eApp Clean] 自动覆盖云端 Gist 成功！");
-          } catch (gistErr) {
-            console.error("[eApp Clean] 自动覆盖云端 Gist 失败:", gistErr);
-          }
-        }
-      }
-      
-      // 标记已完成清理，防止此后二次执行
-      localStorage.setItem('eapp_cleaned_today_default_v4', 'true');
-    }
-  } catch (cleanErr) {
-    console.error('自动清理今日数据失败:', cleanErr);
-  }
-  // =========================================================================
 
   initialReviewQueueLength.value = reviewQueue.value.length;
   try {
