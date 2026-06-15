@@ -32,7 +32,7 @@
       </header>
 
       <!-- 3. 主视图内容区域 -->
-      <main class="app-content">
+      <main class="app-content" :class="{ 'no-scroll': currentTab === 'repo' }">
         <KeepAlive>
           <Transition name="fade" mode="out-in">
             
@@ -3276,6 +3276,10 @@ onMounted(async () => {
   position: relative;
 }
 
+.app-content.no-scroll {
+  overflow-y: hidden;
+}
+
 .tab-content-view {
   width: 100%;
   height: 100%;
@@ -3475,6 +3479,27 @@ onMounted(async () => {
   flex-direction: column;
   gap: 16px;
   padding-bottom: 40px;
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px; /* 留出滚动条间距 */
+}
+
+/* 自定义列表滚动条，提升高级美感 */
+.repo-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.repo-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.repo-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+
+.repo-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .sentence-repo-card {
