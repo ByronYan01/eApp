@@ -2360,29 +2360,27 @@ const formatDate = (timestamp: number) => {
 onMounted(async () => {
   loadData();
 
-  // ================= 自动清理 850 单词例句数据，保留原始 22 句 =================
+  // ================= 自动清理今日误导入默认仓库的数据，保留原始收藏句 =================
   try {
-    const cleanedFlag = localStorage.getItem('eapp_cleaned_850_words_default_v2');
-    if (!cleanedFlag && storage.sentences.value.length > 50) {
-      // 1. 收集 850 个单词的所有例句原文
-      const basicSentenceSet = new Set<string>();
-      const cleanText = (txt: string) => txt.toLowerCase().trim().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'’]/g, "").replace(/\s+/g, " ");
+    const cleanedFlag = localStorage.getItem('eapp_cleaned_today_default_v4');
+    if (!cleanedFlag && storage.sentences.value.length > 0) {
+      // 1. 获取今天 (本地时间) 的起止时间戳范围
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayStartTs = todayStart.getTime();
       
-      for (const key in basicDictData) {
-        const wordInfo = (basicDictData as any)[key];
-        if (wordInfo && wordInfo.example) {
-          basicSentenceSet.add(cleanText(wordInfo.example));
-        }
-      }
-      
-      // 2. 过滤本地 sentences，仅删除默认仓库中属于 850 词例句的项目
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      const todayEndTs = todayEnd.getTime();
+
+      // 2. 过滤掉默认仓库中添加时间为今天的句子
       const originalCount = storage.sentences.value.length;
       const filteredSentences = storage.sentences.value.filter(s => {
         const isDefaultRepo = !s.repoId || s.repoId === 'default';
         if (isDefaultRepo) {
-          const cleanedS = cleanText(s.text);
-          if (basicSentenceSet.has(cleanedS)) {
-            return false;
+          const addedAt = s.addedAt || 0;
+          if (addedAt >= todayStartTs && addedAt <= todayEndTs) {
+            return false; // 添加时间在今天之内，则删除
           }
         }
         return true;
@@ -2390,11 +2388,11 @@ onMounted(async () => {
       
       const deletedCount = originalCount - filteredSentences.length;
       if (deletedCount > 0) {
-        console.log(`[eApp Clean] 自动清理了默认仓库中的 ${deletedCount} 个 850 词例句。`);
+        console.log(`[eApp Clean] 自动清理了默认仓库中今天新增的 ${deletedCount} 个句子。`);
         storage.sentences.value = filteredSentences;
-        storage.saveData(); // 持久化写入本地
+        storage.saveData(); // 保存至本地 LocalStorage
         
-        // 3. 自动触发强推云端，覆盖 Gist 上的 850 单词例句残留
+        // 3. 自动同步强推至云端
         const token = storage.settings.value.githubToken.trim();
         const gistId = storage.settings.value.githubGistId.trim();
         if (token && gistId) {
@@ -2417,10 +2415,10 @@ onMounted(async () => {
       }
       
       // 标记已完成清理，防止此后二次执行
-      localStorage.setItem('eapp_cleaned_850_words_default_v2', 'true');
+      localStorage.setItem('eapp_cleaned_today_default_v4', 'true');
     }
   } catch (cleanErr) {
-    console.error('自动清理 850 单词数据失败:', cleanErr);
+    console.error('自动清理今日数据失败:', cleanErr);
   }
   // =========================================================================
 
