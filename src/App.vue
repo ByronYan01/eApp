@@ -1810,21 +1810,26 @@ const handleSyncData = async () => {
     };
 
     try {
-      const parsed = JSON.parse(cloudDataStr);
-      if (Array.isArray(parsed)) {
-        // 云端是老版本句子数组
-        cloudSentences = parsed;
-        cloudRepos = [defaultRepo];
-      } else if (parsed && typeof parsed === 'object') {
-        cloudSentences = parsed.sentences || [];
-        cloudRepos = parsed.repositories || [defaultRepo];
-        if (!cloudRepos.some(r => r.id === 'default')) {
-          cloudRepos.unshift(defaultRepo);
+      if (cloudDataStr && cloudDataStr.trim()) {
+        const parsed = JSON.parse(cloudDataStr);
+        if (Array.isArray(parsed)) {
+          // 云端是老版本句子数组
+          cloudSentences = parsed;
+          cloudRepos = [defaultRepo];
+        } else if (parsed && typeof parsed === 'object') {
+          cloudSentences = parsed.sentences || [];
+          cloudRepos = parsed.repositories || [defaultRepo];
+          if (!cloudRepos.some(r => r.id === 'default')) {
+            cloudRepos.unshift(defaultRepo);
+          }
         }
+      } else {
+        cloudRepos = [defaultRepo];
       }
     } catch (parseErr) {
-      console.warn('云端备份解析失败，可能文件为空，将自动以本地为主进行覆盖', parseErr);
-      cloudRepos = [defaultRepo];
+      console.error('云端备份解析失败:', parseErr);
+      alert(`⚠️ 智能同步终止：云端备份解析失败（数据可能不完整或损坏）。为防止覆盖丢失数据，同步已被取消。\n错误详情：${parseErr}`);
+      return;
     }
 
     // 2. 双端数据智能无损合并

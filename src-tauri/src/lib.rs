@@ -543,6 +543,23 @@ async fn github_read_gist_backend(token: String, gist_id: String) -> Result<Stri
 
     if let Some(files) = json_resp.get("files") {
         if let Some(file_obj) = files.get("eapp_sync_data.json") {
+            // 优先从 raw_url 读取，以避免大文件被 GitHub 截断 (Gist 限制 content 字段大小)
+            if let Some(raw_url) = file_obj.get("raw_url").and_then(|v| v.as_str()) {
+                let raw_resp = client
+                    .get(raw_url)
+                    .send()
+                    .await
+                    .map_err(|e| format!("请求原始文件失败: {}", e))?;
+                if raw_resp.status().is_success() {
+                    let raw_content = raw_resp
+                        .text()
+                        .await
+                        .map_err(|e| format!("读取原始文件内容失败: {}", e))?;
+                    return Ok(raw_content);
+                }
+            }
+
+            // 兜底：如果 raw_url 读取失败，再尝试直接读取 content
             if let Some(content) = file_obj.get("content").and_then(|v| v.as_str()) {
                 return Ok(content.to_string());
             }
