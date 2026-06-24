@@ -9,7 +9,8 @@ import { eudicService } from './eudic';
  * 清理单词，去除首尾标点符号，便于精准查词
  */
 function cleanWord(word: string): string {
-  return word.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '').toLowerCase();
+  // 允许数字 (0-9)，只过滤掉首尾的标点符号等非字母数字字符
+  return word.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '').toLowerCase();
 }
 
 /**

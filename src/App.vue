@@ -247,9 +247,21 @@
                     
                     <!-- 批量管理与备份按钮组 -->
                     <div class="backup-actions">
-                      <button 
-                        class="backup-btn batch-manage" 
-                        :class="{ 'active': isBatchMode }" 
+                      <!-- 排序下拉选：仅在当前仓库有句子时显示 -->
+                      <div class="repo-sort-control" v-if="filteredSentences.length > 0">
+                        <span class="sort-label">排序</span>
+                        <select v-model="sortOrder" class="glass-select sort-select" title="切换排序方式">
+                          <option value="time-desc">最新优先</option>
+                          <option value="time-asc">最早优先</option>
+                          <option value="alpha-asc">首字母 A → Z</option>
+                          <option value="alpha-desc">首字母 Z → A</option>
+                        </select>
+                      </div>
+                      <div class="action-divider" v-if="filteredSentences.length > 0"></div>
+
+                      <button
+                        class="backup-btn batch-manage"
+                        :class="{ 'active': isBatchMode }"
                         @click="toggleBatchMode"
                         v-if="filteredSentences.length > 0"
                       >
@@ -1225,6 +1237,33 @@
         </div>
       </div>
     </Transition>
+
+    <!-- === 通用自定义确认与提示对话框 === -->
+    <Transition name="fade">
+      <div class="custom-modal-overlay" v-if="dialogState.show" @click.self="handleDialogClose">
+        <div class="custom-modal-card confirm-modal-card" :style="{ maxWidth: dialogState.type === 'choices' ? '480px' : '450px' }">
+          <div class="modal-glow"></div>
+          <div class="custom-modal-header">
+            <h3 class="modal-headline">{{ dialogState.title }}</h3>
+            <button class="modal-close-x" @click="handleDialogClose">×</button>
+          </div>
+          <div class="modal-body-form" style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; padding: 15px 0; white-space: pre-wrap; text-align: center;">{{ dialogState.message }}</div>
+          <div class="modal-footer" :style="{
+            marginTop: '15px',
+            display: 'flex',
+            flexDirection: dialogState.type === 'choices' ? 'column-reverse' : 'row',
+            justifyContent: 'flex-end',
+            gap: '10px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+            paddingTop: '15px'
+          }">
+            <button class="modal-btn cancel" v-if="dialogState.type !== 'alert' && dialogState.cancelText" @click="dialogState.onCancel" :style="{ width: dialogState.type === 'choices' ? '100%' : 'auto', margin: '0' }">{{ dialogState.cancelText }}</button>
+            <button class="modal-btn third" v-if="dialogState.type === 'choices' && dialogState.thirdText" @click="dialogState.onThird" :style="{ width: dialogState.type === 'choices' ? '100%' : 'auto', margin: '0', background: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e', border: '1px solid rgba(244, 63, 94, 0.25)' }">{{ dialogState.thirdText }}</button>
+            <button class="modal-btn confirm" @click="dialogState.onConfirm" :style="{ width: dialogState.type === 'choices' ? '100%' : 'auto', margin: '0' }">{{ dialogState.confirmText }}</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -1259,6 +1298,105 @@ const currentTab = ref('analyze');
 const activeSettingsTab = ref('voice');
 const storage = useStorage();
 const tts = useTTS();
+
+// === 自定义全局提示与确认弹窗系统 ===
+const dialogState = ref<{
+  show: boolean;
+  title: string;
+  message: string;
+  type: 'alert' | 'confirm' | 'choices';
+  confirmText?: string;
+  cancelText?: string;
+  thirdText?: string;
+  onConfirm: () => void;
+  onCancel?: () => void;
+  onThird?: () => void;
+}>({
+  show: false,
+  title: '',
+  message: '',
+  type: 'alert',
+  onConfirm: () => {},
+});
+
+const showAlertDialog = (title: string, message: string, onConfirm?: () => void) => {
+  dialogState.value = {
+    show: true,
+    title,
+    message,
+    type: 'alert',
+    confirmText: '好的',
+    onConfirm: () => {
+      if (onConfirm) onConfirm();
+      dialogState.value.show = false;
+    }
+  };
+};
+
+const showConfirmDialog = (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => {
+  dialogState.value = {
+    show: true,
+    title,
+    message,
+    type: 'confirm',
+    confirmText: '确定',
+    cancelText: '取消',
+    onConfirm: () => {
+      onConfirm();
+      dialogState.value.show = false;
+    },
+    onCancel: () => {
+      if (onCancel) onCancel();
+      dialogState.value.show = false;
+    }
+  };
+};
+
+const showChoicesDialog = (options: {
+  title: string;
+  message: string;
+  confirmText: string;
+  cancelText: string;
+  thirdText?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  onThird?: () => void;
+}) => {
+  dialogState.value = {
+    show: true,
+    title: options.title,
+    message: options.message,
+    type: options.thirdText ? 'choices' : 'confirm',
+    confirmText: options.confirmText,
+    cancelText: options.cancelText,
+    thirdText: options.thirdText,
+    onConfirm: () => {
+      options.onConfirm();
+      dialogState.value.show = false;
+    },
+    onCancel: () => {
+      options.onCancel();
+      dialogState.value.show = false;
+    },
+    onThird: () => {
+      if (options.onThird) options.onThird();
+      dialogState.value.show = false;
+    }
+  };
+};
+
+const handleDialogClose = () => {
+  if (dialogState.value.onCancel) {
+    dialogState.value.onCancel();
+  } else {
+    dialogState.value.show = false;
+  }
+};
+
+// 劫持全局 window.alert，解决 Tauri 下原生 alert 在部分环境下失效或被拦截的问题
+window.alert = (msg: string) => {
+  showAlertDialog('系统提示', msg);
+};
 
 // 连通性测试状态
 const testingAiConnection = ref(false);
@@ -1794,31 +1932,33 @@ const handleForcePush = async () => {
     return;
   }
 
-  if (!confirm('⚠️ 警告：您确定要强制使用【本地句子库】覆盖【云端备份】吗？\n此操作将直接擦除云端中所有不同的数据记录！')) {
-    return;
-  }
-
-  syncing.value = true;
-  try {
-    const localData: StorageData = {
-      version: 2,
-      repositories: storage.repositories.value,
-      sentences: storage.sentences.value
-    };
-    const localDataStr = JSON.stringify(localData);
-    await invoke('github_write_gist_backend', {
-      token,
-      gistId,
-      data: localDataStr
-    });
-    updateSetting('lastSyncedAt', Date.now());
-    alert('🎉 本地数据已强制推送并覆盖云端备份！');
-  } catch (e) {
-    console.error('强制推送失败:', e);
-    alert(`❌ 推送失败:\n${e}`);
-  } finally {
-    syncing.value = false;
-  }
+  showConfirmDialog(
+    '⚠️ 强制覆盖云端警告',
+    '您确定要强制使用【本地句子库】覆盖【云端备份】吗？\n此操作将直接擦除云端中所有不同的数据记录，且不可撤销！',
+    async () => {
+      syncing.value = true;
+      try {
+        const localData: StorageData = {
+          version: 2,
+          repositories: storage.repositories.value,
+          sentences: storage.sentences.value
+        };
+        const localDataStr = JSON.stringify(localData);
+        await invoke('github_write_gist_backend', {
+          token,
+          gistId,
+          data: localDataStr
+        });
+        updateSetting('lastSyncedAt', Date.now());
+        alert('🎉 本地数据已强制推送并覆盖云端备份！');
+      } catch (e) {
+        console.error('强制推送失败:', e);
+        alert(`❌ 推送失败:\n${e}`);
+      } finally {
+        syncing.value = false;
+      }
+    }
+  );
 };
 
 // 强制云端覆盖本地
@@ -1830,56 +1970,58 @@ const handleForcePull = async () => {
     return;
   }
 
-  if (!confirm('⚠️ 警告：您确定要强制使用【云端备份】覆盖【本地句子库】吗？\n此操作将直接擦除您本地所有未同步的学习记录，且无法撤销！')) {
-    return;
-  }
+  showConfirmDialog(
+    '⚠️ 强制覆盖本地警告',
+    '您确定要强制使用【云端备份】覆盖【本地句子库】吗？\n此操作将直接擦除您本地所有未同步的学习记录，且无法撤销！',
+    async () => {
+      syncing.value = true;
+      try {
+        const cloudDataStr = await invoke<string>('github_read_gist_backend', {
+          token,
+          gistId
+        });
 
-  syncing.value = true;
-  try {
-    const cloudDataStr = await invoke<string>('github_read_gist_backend', {
-      token,
-      gistId
-    });
+        const parsed = JSON.parse(cloudDataStr);
+        let cloudSentences: SentenceItem[] = [];
+        let cloudRepos: Repository[] = [];
+        
+        const defaultRepo: Repository = {
+          id: 'default',
+          name: '默认仓库',
+          createdAt: Date.now(),
+          isSystem: true
+        };
 
-    const parsed = JSON.parse(cloudDataStr);
-    let cloudSentences: SentenceItem[] = [];
-    let cloudRepos: Repository[] = [];
-    
-    const defaultRepo: Repository = {
-      id: 'default',
-      name: '默认仓库',
-      createdAt: Date.now(),
-      isSystem: true
-    };
+        if (Array.isArray(parsed)) {
+          cloudSentences = parsed.map(s => ({ ...s, repoId: 'default' }));
+          cloudRepos = [defaultRepo];
+        } else if (parsed && typeof parsed === 'object') {
+          cloudSentences = parsed.sentences || [];
+          cloudRepos = parsed.repositories || [defaultRepo];
+          if (!cloudRepos.some(r => r.id === 'default')) {
+            cloudRepos.unshift(defaultRepo);
+          }
+        }
 
-    if (Array.isArray(parsed)) {
-      cloudSentences = parsed.map(s => ({ ...s, repoId: 'default' }));
-      cloudRepos = [defaultRepo];
-    } else if (parsed && typeof parsed === 'object') {
-      cloudSentences = parsed.sentences || [];
-      cloudRepos = parsed.repositories || [defaultRepo];
-      if (!cloudRepos.some(r => r.id === 'default')) {
-        cloudRepos.unshift(defaultRepo);
+        storage.sentences.value = cloudSentences;
+        storage.repositories.value = cloudRepos;
+        
+        const exportObj: StorageData = {
+          version: 2,
+          repositories: cloudRepos,
+          sentences: cloudSentences
+        };
+        localStorage.setItem('eapp_sentence_data', JSON.stringify(exportObj));
+        updateSetting('lastSyncedAt', Date.now());
+        alert('🎉 已强制从云端覆盖并更新本地句子库！');
+      } catch (e) {
+        console.error('强制拉取失败:', e);
+        alert(`❌ 拉取失败:\n${e}`);
+      } finally {
+        syncing.value = false;
       }
     }
-
-    storage.sentences.value = cloudSentences;
-    storage.repositories.value = cloudRepos;
-    
-    const exportObj: StorageData = {
-      version: 2,
-      repositories: cloudRepos,
-      sentences: cloudSentences
-    };
-    localStorage.setItem('eapp_sentence_data', JSON.stringify(exportObj));
-    updateSetting('lastSyncedAt', Date.now());
-    alert('🎉 已强制从云端覆盖并更新本地句子库！');
-  } catch (e) {
-    console.error('强制拉取失败:', e);
-    alert(`❌ 拉取失败:\n${e}`);
-  } finally {
-    syncing.value = false;
-  }
+  );
 };
 
 // ==================== 接口测速与最佳配置逻辑 ====================
@@ -2124,16 +2266,33 @@ const importProgressCurrent = ref(0);
 const importing = ref(false);
 
 // 仓库下句子的计算属性
+// sortOrder: 排序模式 —— time-desc(默认,最新优先) / time-asc(最早优先) / alpha-asc(A-Z) / alpha-desc(Z-A)
+const sortOrder = ref<'time-desc' | 'time-asc' | 'alpha-asc' | 'alpha-desc'>('time-desc');
+
 const filteredSentences = computed(() => {
+  let list: SentenceItem[];
   if (selectedRepoId.value === 'all') {
-    return sentences.value;
+    list = [...sentences.value];
+  } else {
+    list = sentences.value.filter(s => {
+      if (selectedRepoId.value === 'default') {
+        return !s.repoId || s.repoId === 'default';
+      }
+      return s.repoId === selectedRepoId.value;
+    });
   }
-  return sentences.value.filter(s => {
-    if (selectedRepoId.value === 'default') {
-      return !s.repoId || s.repoId === 'default';
-    }
-    return s.repoId === selectedRepoId.value;
-  });
+  // 排序分支（不污染原数组，使用副本）
+  switch (sortOrder.value) {
+    case 'time-asc':
+      return list.sort((a, b) => a.addedAt - b.addedAt);
+    case 'alpha-asc':
+      return list.sort((a, b) => a.text.localeCompare(b.text, 'en', { sensitivity: 'base' }));
+    case 'alpha-desc':
+      return list.sort((a, b) => b.text.localeCompare(a.text, 'en', { sensitivity: 'base' }));
+    case 'time-desc':
+    default:
+      return list.sort((a, b) => b.addedAt - a.addedAt);
+  }
 });
 
 // 计算某个仓库下的句子总数
@@ -2176,26 +2335,38 @@ const handleDeleteRepo = (repoId: string) => {
   if (!repo) return;
 
   const count = getRepoSentenceCount(repoId);
-  let msg = `⚠️ 确定要删除仓库【${repo.name}】吗？`;
-  if (count > 0) {
-    msg += `\n该仓库内目前有 ${count} 个句子。`;
-  }
   
   if (count === 0) {
-    if (confirm(msg)) {
-      storage.deleteRepository(repoId);
-      selectedRepoId.value = 'all';
-    }
+    showConfirmDialog(
+      '⚠️ 删除分类仓库',
+      `确定要删除仓库【${repo.name}】吗？`,
+      () => {
+        storage.deleteRepository(repoId);
+        selectedRepoId.value = 'all';
+      }
+    );
     return;
   }
 
   // 询问是连带删除句子还是移入默认仓库
-  const choices = confirm(`${msg}\n\n点击【确定】：保留该仓库内的句子，并自动将它们转移到【默认仓库】。\n点击【取消】：放弃删除操作。`);
-  if (choices) {
-    storage.deleteRepository(repoId, false);
-    selectedRepoId.value = 'all';
-    alert('仓库已删除，句子已成功搬家至默认仓库！');
-  }
+  showChoicesDialog({
+    title: '⚠️ 删除分类仓库',
+    message: `分类仓库【${repo.name}】内目前有 ${count} 个句子。\n请选择如何处理该仓库内的学习句子：`,
+    confirmText: '保留句子（搬家至默认仓库）',
+    thirdText: '连带删除所有句子',
+    cancelText: '取消删除',
+    onConfirm: () => {
+      storage.deleteRepository(repoId, false);
+      selectedRepoId.value = 'all';
+      alert('仓库已删除，句子已成功搬家至默认仓库！');
+    },
+    onThird: () => {
+      storage.deleteRepository(repoId, true);
+      selectedRepoId.value = 'all';
+      alert('仓库及其中的所有句子已成功删除！');
+    },
+    onCancel: () => {}
+  });
 };
 
 // 触发批量模式切换
@@ -2236,13 +2407,17 @@ const handleBatchDelete = () => {
     alert('请先勾选需要删除的句子！');
     return;
   }
-  if (confirm(`⚠️ 警告：确定要批量删除这 ${selectedSentenceIds.value.length} 个句子吗？该操作不可撤销！`)) {
-    storage.sentences.value = storage.sentences.value.filter(s => !selectedSentenceIds.value.includes(s.id));
-    storage.saveData();
-    alert('句子已成功批量删除！');
-    isBatchMode.value = false;
-    selectedSentenceIds.value = [];
-  }
+  showConfirmDialog(
+    '⚠️ 批量删除警告',
+    `确定要批量删除这 ${selectedSentenceIds.value.length} 个句子吗？该操作不可撤销！`,
+    () => {
+      storage.sentences.value = storage.sentences.value.filter(s => !selectedSentenceIds.value.includes(s.id));
+      storage.saveData();
+      alert('句子已成功批量删除！');
+      isBatchMode.value = false;
+      selectedSentenceIds.value = [];
+    }
+  );
 };
 
 // 外部材料批量导入后台解析流水线
@@ -2525,6 +2700,9 @@ onMounted(async () => {
 
 .repo-rename-input {
   flex: 1;
+  min-width: 0;
+  height: 24px;
+  box-sizing: border-box;
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--color-primary);
   color: var(--text-primary);
@@ -3378,7 +3556,8 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 16px 24px;
   border-bottom: 1px solid var(--glass-border);
   padding-bottom: 24px;
   margin-bottom: 24px;
@@ -3386,7 +3565,39 @@ onMounted(async () => {
 
 .backup-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
+}
+
+/* 排序控件：标签 + 下拉选 */
+.repo-sort-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.repo-sort-control .sort-label {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+.repo-sort-control .sort-select {
+  padding: 7px 30px 7px 12px !important;
+  font-size: 0.82rem !important;
+  cursor: pointer;
+  min-width: 130px;
+}
+
+/* 排序区与操作按钮区的视觉分隔 */
+.action-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--glass-border);
+  align-self: center;
+  flex-shrink: 0;
 }
 
 .backup-btn {
