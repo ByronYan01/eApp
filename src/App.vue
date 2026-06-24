@@ -1272,6 +1272,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { useStorage, type AppSettings, type StorageData, type Repository, type SentenceItem } from './composables/useStorage';
 import { useTTS } from './composables/useTTS';
 import { translateSentence, parseSentenceWords } from './services/youdao';
@@ -2228,6 +2229,9 @@ const startUpdating = async () => {
       });
       
       currentUpdateProgress.value = 100;
+      updateProgress.value = '安装完成，正在重启应用...';
+      await new Promise(resolve => setTimeout(resolve, 800));
+      await relaunch();
     }
   } catch (e) {
     console.error('更新下载安装失败:', e);
