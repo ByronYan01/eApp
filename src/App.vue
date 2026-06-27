@@ -1,5 +1,5 @@
 <template>
-  <div class="app-window">
+  <div class="app-window" :class="{ 'is-mac': isMac }">
     <!-- 1. 缓缓漂移的发光微粒背景 -->
     <div class="bg-glow-orb-1"></div>
     <div class="bg-glow-orb-2"></div>
@@ -11,7 +11,7 @@
       <header class="app-header" data-tauri-drag-region>
         <div class="brand" data-tauri-drag-region>
           <span class="brand-logo">e</span>
-          <h1 class="brand-title" data-tauri-drag-region>eApp <span class="badge">English</span></h1>
+          <h1 class="brand-title" data-tauri-drag-region>eApp</h1>
         </div>
         
         <nav class="nav-tabs">
@@ -25,7 +25,7 @@
             <span class="tab-icon" v-html="tab.icon"></span>
             {{ tab.name }}
             <span v-if="tab.id === 'review' && reviewQueueCount > 0" class="badge-count">
-              {{ reviewQueueCount }}
+              {{ reviewQueueCount > 99 ? '99+' : reviewQueueCount }}
             </span>
           </button>
         </nav>
@@ -39,8 +39,8 @@
             <!-- A. 智能解析视图 -->
             <div v-if="currentTab === 'analyze'" class="tab-content-view">
               <div class="center-box">
-                <h2 class="section-headline">英语句子智能解析</h2>
-                <p class="section-subtitle">输入您在阅读或听力中遇到的英语句子，秒级获取精准翻译、标准音标及逐词悬浮解析。</p>
+                <h2 class="section-headline">智能解析</h2>
+                <p class="section-subtitle">输入英语句子，获取精准翻译、音标与逐词解析。</p>
                 
                 <SentenceInput 
                   :loading="parsing" 
@@ -72,9 +72,9 @@
                   />
                   <!-- 收藏目标仓库选择器 -->
                   <div class="save-repo-selector-row" v-if="parsedResult && !isCurrentSentenceSaved">
-                    <span class="save-repo-label">收藏目标仓库：</span>
+                    <span class="save-repo-label">保存至：</span>
                     <select v-model="selectedSaveRepoId" class="glass-select">
-                      <option value="default">🏠 默认收集</option>
+                      <option value="default">🏠 默认仓库</option>
                       <option v-for="repo in storage.repositories.value.filter(r => r.id !== 'default')" :key="repo.id" :value="repo.id">
                         📚 {{ repo.name }}
                       </option>
@@ -89,8 +89,8 @@
               <div class="center-box">
                 <div class="review-header-row">
                   <div>
-                    <h2 class="section-headline">艾宾浩斯智能复习</h2>
-                    <p class="section-subtitle">基于记忆遗忘曲线，为您筛选出今日到期需要强化的句子，通过 3D 卡片进行高效盲测复习。</p>
+                    <h2 class="section-headline">智能复习</h2>
+                    <p class="section-subtitle">基于记忆遗忘曲线，为您筛选今日到期需要强化的句子。</p>
                   </div>
                   <!-- 复习模式切换 Pill -->
                   <div class="review-mode-selector" v-if="reviewQueue.length > 0">
@@ -114,10 +114,10 @@
                 <!-- 仓库分类过滤 -->
                 <div class="review-filter-row">
                   <div class="review-repo-selector">
-                    <span class="review-repo-label">当前复习分类库：</span>
+                    <span class="review-repo-label">复习分类：</span>
                     <select v-model="selectedReviewRepoId" class="glass-select">
-                      <option value="all">📂 全部仓库 ({{ sentences.length }})</option>
-                      <option value="default">🏠 默认收集 ({{ getRepoSentenceCount('default') }})</option>
+                      <option value="all">📂 全部 ({{ sentences.length }})</option>
+                      <option value="default">🏠 默认仓库 ({{ getRepoSentenceCount('default') }})</option>
                       <option v-for="repo in storage.repositories.value.filter(r => r.id !== 'default')" :key="repo.id" :value="repo.id">
                         📚 {{ repo.name }} ({{ getRepoSentenceCount(repo.id) }})
                       </option>
@@ -161,7 +161,7 @@
                 <!-- 左栏：分类仓库侧边栏 -->
                 <div class="repo-sidebar-panel">
                   <div class="sidebar-header">
-                    <span class="sidebar-title">仓库分类</span>
+                    <span class="sidebar-title">分类</span>
                     <button class="add-repo-btn-mini" @click="showCreateRepoModal = true" title="新建分类仓库">
                       ➕ 新建
                     </button>
@@ -186,7 +186,7 @@
                       @click="selectedRepoId = 'default'"
                     >
                       <span class="repo-icon">🏠</span>
-                      <span class="repo-name-text">默认收集</span>
+                      <span class="repo-name-text">默认仓库</span>
                       <span class="repo-badge-count">{{ getRepoSentenceCount('default') }}</span>
                     </div>
 
@@ -225,36 +225,41 @@
                       </div>
                     </div>
                   </div>
-
-                  <!-- 批量材料导入按钮 -->
-                  <button class="bulk-import-trigger-btn" @click="showImportModal = true">
-                    📥 批量导入学习材料
-                  </button>
                 </div>
 
                 <!-- 右栏：句子展示流 -->
                 <div class="repo-main-content">
                   <div class="repo-header-row">
-                    <div>
-                      <h2 class="section-headline">
-                        {{ selectedRepoId === 'all' ? '全部句子' : (storage.repositories.value.find(r => r.id === selectedRepoId)?.name || '未名仓库') }}
-                        ({{ filteredSentences.length }})
-                      </h2>
-                      <p class="section-subtitle">
-                        {{ selectedRepoId === 'all' ? '管理您收藏的全部句子。' : (storage.repositories.value.find(r => r.id === selectedRepoId)?.description || '管理当前分类下的学习句子。') }}
-                      </p>
-                    </div>
+                    <h2 class="section-headline">
+                      {{ selectedRepoId === 'all' ? '全部句子' : (storage.repositories.value.find(r => r.id === selectedRepoId)?.name || '未名仓库') }}
+                      ({{ filteredSentences.length }})
+                    </h2>
                     
                     <!-- 批量管理与备份按钮组 -->
                     <div class="backup-actions">
+                      <!-- 搜索过滤输入框 -->
+                      <div class="repo-search-wrapper" v-if="getRepoSentenceCount(selectedRepoId) > 0 || searchQuery">
+                        <svg class="search-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="11" cy="11" r="8"></circle>
+                          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input 
+                          type="text" 
+                          v-model="searchQuery" 
+                          placeholder="搜索..." 
+                          class="search-input"
+                          title="输入英文句子或中文翻译进行搜索过滤"
+                        />
+                        <span class="search-clear-btn" v-if="searchQuery" @click="searchQuery = ''">×</span>
+                      </div>
+                      
                       <!-- 排序下拉选：仅在当前仓库有句子时显示 -->
                       <div class="repo-sort-control" v-if="filteredSentences.length > 0">
-                        <span class="sort-label">排序</span>
                         <select v-model="sortOrder" class="glass-select sort-select" title="切换排序方式">
-                          <option value="time-desc">最新优先</option>
-                          <option value="time-asc">最早优先</option>
-                          <option value="alpha-asc">首字母 A → Z</option>
-                          <option value="alpha-desc">首字母 Z → A</option>
+                          <option value="time-desc">最新</option>
+                          <option value="time-asc">最早</option>
+                          <option value="alpha-asc">A-Z</option>
+                          <option value="alpha-desc">Z-A</option>
                         </select>
                       </div>
                       <div class="action-divider" v-if="filteredSentences.length > 0"></div>
@@ -265,23 +270,16 @@
                         @click="toggleBatchMode"
                         v-if="filteredSentences.length > 0"
                       >
-                        ⚡ 批量管理
+                        ⚡ 批量
                       </button>
-                      
-                      <button class="backup-btn export" @click="storage.exportData" title="备份所有数据到本地 JSON">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-                        </svg>
-                        导出备份
+
+                      <button 
+                        class="backup-btn import-material" 
+                        @click="showImportModal = true"
+                        title="批量导入学习材料"
+                      >
+                        📥 导入材料
                       </button>
-                      
-                      <label class="backup-btn import" title="从 JSON 备份中恢复">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                        </svg>
-                        导入备份
-                        <input type="file" accept=".json" @change="handleImportBackup" style="display: none;" />
-                      </label>
                     </div>
                   </div>
 
@@ -382,18 +380,18 @@
                             {{ item.status === 'learning' ? '学习中' : '已掌握' }}
                           </span>
                           <!-- 句子所在仓库标签 -->
-                          <span class="meta-repo-tag" v-if="selectedRepoId === 'all'">
+                          <span class="meta-repo-tag" v-if="selectedRepoId === 'all'" :title="storage.repositories.value.find(r => r.id === (item.repoId || 'default'))?.name || '默认仓库'">
                             🏷️ {{ storage.repositories.value.find(r => r.id === (item.repoId || 'default'))?.name || '默认仓库' }}
                           </span>
-                          <span class="meta-time">添加于: {{ formatDate(item.addedAt) }}</span>
-                          <span class="meta-count">复习次数: {{ item.reviewCount }}</span>
+                          <span class="meta-time">📅 {{ formatDate(item.addedAt) }}</span>
+                          <span class="meta-count">🔄 {{ item.reviewCount }}</span>
                           
                           <!-- 展开/收起文字提示按钮 -->
                           <button 
                             class="meta-expand-toggle-btn"
                             @click="toggleExpandSentence(item.id)"
                           >
-                            {{ expandedSentenceId === item.id ? '收起解析 ▲' : '查看解析详情 ▼' }}
+                            {{ expandedSentenceId === item.id ? '收起 ▲' : '详情 ▼' }}
                           </button>
                         </div>
                       </div>
@@ -424,6 +422,17 @@
                             <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
                           </svg>
                         </button>
+                        <!-- 编辑该句子按钮 -->
+                        <button 
+                          class="action-circle-btn edit" 
+                          @click="openEditDrawer(item)" 
+                          title="编辑该句子"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                          </svg>
+                        </button>
                         <!-- 切换掌握状态 -->
                         <button 
                           class="action-circle-btn check" 
@@ -450,7 +459,7 @@
                   <div v-else class="empty-state-card">
                     <div class="box-icon">📦</div>
                     <h3>本分类下没有句子</h3>
-                    <p>您可以在【智能解析】中将句子保存到此分类，或者点击左侧“批量导入学习材料”快速灌入句子。</p>
+                    <p>您可以在【智能解析】中将句子保存到此分类，或者点击右上角“导入材料”快速灌入句子。</p>
                   </div>
                 </div>
 
@@ -474,8 +483,8 @@
             <!-- D. 系统设置视图 -->
             <div v-else-if="currentTab === 'settings'" class="tab-content-view animate-fade-in">
               <div class="center-box">
-                <h2 class="section-headline">系统个性化设置</h2>
-                <p class="section-subtitle">自定义您的音标口音、发音音频通道及兜底机制，打造最贴合您学习习惯的智能英语工具。</p>
+                <h2 class="section-headline">系统设置</h2>
+                <p class="section-subtitle">自定义您的音标口音、发音通道等，打造个性化英语学习工具。</p>
 
                 <div class="settings-layout">
                   <!-- 左侧侧边栏导航 -->
@@ -486,7 +495,7 @@
                       @click="activeSettingsTab = 'voice'"
                     >
                       <span class="sidebar-tab-icon">🗣️</span>
-                      <span class="sidebar-tab-text">语音与音标</span>
+                      <span class="sidebar-tab-text">语音音标</span>
                     </button>
                     <button 
                       class="sidebar-tab-btn" 
@@ -518,7 +527,7 @@
                       @click="activeSettingsTab = 'about'"
                     >
                       <span class="sidebar-tab-icon">🚀</span>
-                      <span class="sidebar-tab-text">关于应用</span>
+                      <span class="sidebar-tab-text">关于</span>
                     </button>
                   </div>
 
@@ -1010,6 +1019,23 @@
                             </div>
                           </div>
                         </div>
+
+                        <!-- 本地数据手动备份卡片 -->
+                        <div class="settings-card-compact" style="margin-top: 20px;">
+                          <div class="settings-group">
+                            <h3>本地数据手动备份</h3>
+                            <p class="group-desc">手动导出本地的句子仓库与复习历史为 JSON 备份文件，或从中恢复您的进度。</p>
+                            <div style="display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap;">
+                              <button class="toggle-choice-btn active" @click="storage.exportData" style="padding: 8px 16px; font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer; border: none; border-radius: 4px;">
+                                📤 导出备份文件
+                              </button>
+                              <label class="toggle-choice-btn" style="padding: 8px 16px; font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; margin: 0; border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; color: var(--text-secondary); transition: all 0.2s;">
+                                📥 导入备份文件
+                                <input type="file" accept=".json" @change="handleImportBackup" style="display: none;" />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
                       <!-- 4. 关于应用与自动升级 panel -->
@@ -1264,11 +1290,59 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 句子编辑侧滑抽屉 -->
+    <div class="drawer-backdrop" :class="{ 'is-active': showEditDrawer }" @click="closeEditDrawer"></div>
+    <div class="edit-drawer-panel" :class="{ 'is-active': showEditDrawer }">
+      <div class="drawer-header">
+        <h3 class="drawer-title">📝 编辑句子</h3>
+        <button class="drawer-close-btn" @click="closeEditDrawer">×</button>
+      </div>
+      
+      <div class="drawer-body">
+        <div class="drawer-form-group">
+          <label class="drawer-label">英文原句</label>
+          <textarea 
+            v-model="editForm.text" 
+            class="drawer-textarea" 
+            placeholder="请输入英文句子..."
+            rows="4"
+          ></textarea>
+        </div>
+        
+        <div class="drawer-form-group">
+          <label class="drawer-label">中文翻译</label>
+          <textarea 
+            v-model="editForm.translation" 
+            class="drawer-textarea" 
+            placeholder="请输入中文翻译..."
+            rows="3"
+          ></textarea>
+        </div>
+        
+        <div class="drawer-form-group checkbox-row">
+          <label class="drawer-checkbox-label">
+            <input type="checkbox" v-model="editForm.reAnalyze" class="drawer-checkbox" />
+            <span>保存时重新生成单词解析与音标</span>
+          </label>
+        </div>
+      </div>
+      
+      <div class="drawer-footer">
+        <button class="drawer-btn cancel" @click="closeEditDrawer">放弃修改</button>
+        <button class="drawer-btn confirm" :disabled="savingEdit" @click="handleSaveSentenceEdit">
+          <span class="btn-spinner" v-if="savingEdit"></span>
+          {{ savingEdit ? '正在保存...' : '确认保存' }}
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+
+const isMac = ref(navigator.userAgent.toUpperCase().indexOf('MAC') >= 0);
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { check } from '@tauri-apps/plugin-updater';
@@ -2290,6 +2364,16 @@ const filteredSentences = computed(() => {
       return s.repoId === selectedRepoId.value;
     });
   }
+
+  // 结合关键字双语搜索过滤
+  if (searchQuery.value.trim()) {
+    const query = searchQuery.value.toLowerCase().trim();
+    list = list.filter(s => 
+      s.text.toLowerCase().includes(query) || 
+      (s.translation && s.translation.includes(query))
+    );
+  }
+
   // 排序分支（不污染原数组，使用副本）
   switch (sortOrder.value) {
     case 'time-asc':
@@ -2556,6 +2640,79 @@ onMounted(async () => {
   // 静默检查自动更新
   checkForUpdates(true);
 });
+
+// === 句子搜索与编辑抽屉逻辑 ===
+const searchQuery = ref('');
+const showEditDrawer = ref(false);
+const savingEdit = ref(false);
+const editingSentenceId = ref<string | null>(null);
+const editForm = ref({ text: '', translation: '', reAnalyze: true });
+
+const openEditDrawer = (item: SentenceItem) => {
+  editingSentenceId.value = item.id;
+  editForm.value = {
+    text: item.text,
+    translation: item.translation,
+    reAnalyze: true
+  };
+  showEditDrawer.value = true;
+};
+
+const closeEditDrawer = () => {
+  if (savingEdit.value) return;
+  showEditDrawer.value = false;
+  editingSentenceId.value = null;
+};
+
+const handleSaveSentenceEdit = async () => {
+  if (savingEdit.value) return;
+  const sentenceId = editingSentenceId.value;
+  if (!sentenceId) return;
+
+  const text = editForm.value.text.trim();
+  const translationInput = editForm.value.translation.trim();
+
+  if (!text) {
+    alert('句子内容不能为空');
+    return;
+  }
+
+  savingEdit.value = true;
+
+  try {
+    const item = storage.sentences.value.find(s => s.id === sentenceId);
+    if (item) {
+      if (editForm.value.reAnalyze && item.text !== text) {
+        const [translation, words] = await Promise.all([
+          translationInput ? Promise.resolve(translationInput) : translateSentence(text, storage.settings.value.translationProvider, storage.settings.value.translationTimeout),
+          parseSentenceWords(text, storage.settings.value)
+        ]);
+
+        const list = words
+          .filter(w => w.phonetic && !w.phonetic.includes('无'))
+          .map(w => w.phonetic);
+        const phonetics = list.length > 0 ? `/[ ${list.join(' ')} ]/` : '';
+
+        item.text = text;
+        item.translation = translationInput || translation;
+        item.words = words;
+        item.phonetics = phonetics;
+      } else {
+        item.text = text;
+        item.translation = translationInput;
+      }
+
+      storage.saveData();
+      showEditDrawer.value = false;
+      editingSentenceId.value = null;
+    }
+  } catch (error) {
+    console.error('保存句子修改失败:', error);
+    alert('保存失败，请检查网络后再试');
+  } finally {
+    savingEdit.value = false;
+  }
+};
 </script>
 
 <style scoped>
@@ -2568,17 +2725,18 @@ onMounted(async () => {
 }
 
 .repo-sidebar-panel {
-  width: 260px;
+  width: 200px;             /* 收窄侧边栏宽度 */
   background: rgba(255, 255, 255, 0.01);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  padding: 16px;
+  padding: 12px;            /* 收缩内边距 */
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   backdrop-filter: blur(10px);
   height: max-content;
   max-height: calc(100vh - 120px);
+  flex-shrink: 0;           /* 防止侧边栏被内容区压窄 */
 }
 
 .sidebar-header {
@@ -2590,7 +2748,7 @@ onMounted(async () => {
 }
 
 .sidebar-title {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--text-secondary);
@@ -2624,8 +2782,8 @@ onMounted(async () => {
 .repo-menu-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 8px 10px;        /* 紧缩每个分类行高度 */
   border-radius: var(--radius-sm);
   cursor: pointer;
   position: relative;
@@ -2644,12 +2802,12 @@ onMounted(async () => {
 }
 
 .repo-icon {
-  font-size: 1rem;
+  font-size: 0.9rem;
 }
 
 .repo-name-text {
   flex: 1;
-  font-size: 0.85rem;
+  font-size: 0.8rem;        /* 调小分类名字字号 */
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -2753,14 +2911,16 @@ onMounted(async () => {
 
 /* 批量管理操作条 */
 .batch-control-bar {
-  background: rgba(99, 102, 241, 0.05);
-  border: 1px solid rgba(99, 102, 241, 0.15);
-  border-radius: var(--radius-sm);
-  padding: 12px 16px;
+  background: transparent;  /* 彻底去除背景色 */
+  border: none;             /* 彻底去除边框 */
+  border-radius: 0;
+  padding: 4px 0;           /* 大幅缩减内边距 */
   display: flex;
   justify-content: space-between;
   align-items: center;
-  backdrop-filter: blur(5px);
+  backdrop-filter: none;
+  margin-top: -6px;         /* 负边距控制微观间距，消除 36px 巨大空隙 */
+  margin-bottom: -6px;
 }
 
 .batch-left {
@@ -3232,15 +3392,15 @@ onMounted(async () => {
 }
 
 .review-filter-row {
-  margin-bottom: 20px;
+  margin-bottom: 12px;      /* 调小过滤器与卡片的间距 */
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   background: rgba(255, 255, 255, 0.01);
   border: 1px solid var(--glass-border);
-  padding: 10px 18px;
-  border-radius: 10px;
+  padding: 8px 14px;        /* 稍微收窄 padding，去噪降噪 */
+  border-radius: 8px;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -3292,13 +3452,18 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 40px;
+  padding: 0 24px; /* 默认使用较小的 padding */
   background: rgba(255, 255, 255, 0.01);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--glass-border);
   -webkit-app-region: drag; /* 显式指定顶部导航栏可拖拽窗口 */
   user-select: none; /* 禁用文本选择，防止冲突 */
   -webkit-user-select: none;
+}
+
+/* 在 macOS 平台下，左侧需要避让窗口控制按钮 */
+.is-mac .app-header {
+  padding: 0 24px 0 80px;
 }
 
 .brand {
@@ -3359,6 +3524,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap; /* 防止横向菜单按钮名称换行 */
   transition: all var(--transition-fast);
 }
 
@@ -3389,10 +3555,15 @@ onMounted(async () => {
 .badge-count {
   background: var(--color-accent);
   color: white;
-  font-size: 0.7rem;
+  font-size: 0.625rem; /* 字号调小 (10px) */
   font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 99px;
+  padding: 0 4px; /* 减小内边距，减少空间占用 */
+  height: 14px; /* 精巧高度 */
+  min-width: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
   box-shadow: 0 0 8px var(--color-accent-glow);
 }
 
@@ -3428,13 +3599,15 @@ onMounted(async () => {
   font-size: 1.8rem;
   font-weight: 700;
   letter-spacing: -0.5px;
+  margin-bottom: 6px;       /* 标题与副标题保持极紧密的关系 */
 }
 
 .section-subtitle {
   font-size: 0.95rem;
   color: var(--text-secondary);
   line-height: 1.6;
-  margin-bottom: 8px;
+  margin-top: 0;            /* 强制消除额外的上部 margin */
+  margin-bottom: 16px;      /* 宏观上与下方卡片或输入框隔开 */
 }
 
 /* 解析页面专属样式 */
@@ -3564,12 +3737,18 @@ onMounted(async () => {
 .repo-header-row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;      /* 修改为垂直居中对齐 */
   flex-wrap: wrap;
   gap: 16px 24px;
   border-bottom: 1px solid var(--glass-border);
-  padding-bottom: 24px;
-  margin-bottom: 24px;
+  padding-bottom: 16px;     /* 收缩下内边距，给句子列表腾出高度 */
+  margin-bottom: 0px;       /* 移除冗余外底边距，消除批量栏巨幅空隙，靠父gap统一控制 */
+}
+
+.repo-header-row .section-headline {
+  font-size: 1.25rem;       /* 单独缩减句子仓库主标题的字号大小 */
+  letter-spacing: 0;
+  margin: 0;
 }
 
 .backup-actions {
@@ -3703,11 +3882,24 @@ onMounted(async () => {
 
 .repo-card-meta {
   display: flex;
-  gap: 16px;
+  gap: 12px;                /* 缩窄子项间距 */
   font-size: 0.75rem;
   color: var(--text-muted);
   align-items: center;
   margin-top: 4px;
+  flex-wrap: wrap;          /* 宽度不够时整体折行，防单字折行 */
+}
+
+.repo-card-meta > * {
+  white-space: nowrap;      /* 强制所有直接子项单行展示，禁止单字折行 */
+  flex-shrink: 0;           /* 防止被强行压缩变形 */
+}
+
+.meta-repo-tag {
+  max-width: 80px;          /* 限制长仓库名的显示宽度 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .meta-tag {
@@ -3822,6 +4014,7 @@ onMounted(async () => {
   font-weight: 600;
   cursor: pointer;
   text-align: left;
+  white-space: nowrap; /* 防止设置页侧边栏菜单名折行 */
   transition: all var(--transition-normal);
 }
 
@@ -3856,7 +4049,7 @@ onMounted(async () => {
 .settings-tab-panel {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;                /* 缩减设置卡片与卡片之间的 gap */
 }
 
 /* 紧凑型设置卡片 */
@@ -3866,7 +4059,7 @@ onMounted(async () => {
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  padding: 28px 32px;
+  padding: 20px 24px;       /* 收窄设置卡片内部的大面积留白 */
   box-shadow: var(--glass-shadow);
   transition: all var(--transition-normal);
 }
@@ -3916,6 +4109,26 @@ onMounted(async () => {
 }
 
 /* 响应式媒体查询 */
+@media (max-width: 980px) {
+  .app-header {
+    padding: 0 20px; /* 默认缩窄头部内边距 */
+  }
+  .is-mac .app-header {
+    padding: 0 20px 0 80px; /* macOS 依然需要保持左侧 80px 的避让 */
+  }
+  .app-content {
+    padding: 20px; /* 缩窄主内容区内边距，给句子仓库侧边栏及内容腾出更多宽度 */
+  }
+  .nav-tabs {
+    gap: 8px; /* 缩窄标签栏间距 */
+  }
+  .tab-btn {
+    padding: 6px 12px; /* 缩窄标签按钮尺寸 */
+    font-size: 0.85rem; /* 微调字体大小 */
+    gap: 6px;
+  }
+}
+
 @media (max-width: 768px) {
   .settings-layout {
     flex-direction: column;
@@ -4849,5 +5062,271 @@ input:checked + .slider:before {
   padding: 2px 8px;
   border-radius: 6px;
   border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+/* ==================== 句子仓库搜索与编辑抽屉专属样式 ==================== */
+.repo-search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon-svg {
+  position: absolute;
+  left: 10px;
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 170px;
+  height: 32px;
+  padding: 6px 30px 6px 30px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.search-input:focus {
+  width: 220px;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.15);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 10px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  user-select: none;
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+.search-clear-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 抽屉遮罩背景 */
+.drawer-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.drawer-backdrop.is-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 侧滑抽屉面板 (macOS 高端玻璃磨砂感) */
+.edit-drawer-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 400px;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: -15px 0 35px rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  transform: translateX(100%);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.edit-drawer-panel.is-active {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.drawer-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.drawer-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.8rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  transition: all var(--transition-fast);
+}
+
+.drawer-close-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.drawer-body {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.drawer-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drawer-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.drawer-textarea {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-primary);
+  padding: 12px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  font-family: inherit;
+  transition: all var(--transition-fast);
+}
+
+.drawer-textarea:focus {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 8px var(--color-primary-glow);
+}
+
+.drawer-form-group.checkbox-row {
+  margin-top: 5px;
+}
+
+.drawer-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.drawer-checkbox {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.drawer-footer {
+  padding: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.drawer-btn {
+  padding: 10px 18px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.drawer-btn.cancel {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+}
+
+.drawer-btn.cancel:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.drawer-btn.confirm {
+  background: linear-gradient(135deg, var(--color-primary), #4f46e5);
+  border: none;
+  color: white;
+  box-shadow: 0 4px 12px var(--color-primary-glow);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawer-btn.confirm:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px var(--color-primary-glow);
+}
+
+.drawer-btn.confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: drawer-spin 0.8s linear infinite;
+}
+
+@keyframes drawer-spin {
+  to { transform: rotate(360deg); }
 }
 </style>
