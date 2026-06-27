@@ -66,20 +66,13 @@
                     :audioPlaySource="storage.settings.value.audioPlaySource"
                     :audioPlayProvider="storage.settings.value.audioPlayProvider"
                     :dictionaryProvider="storage.settings.value.dictionaryProvider"
+                    :showRepoSelector="true"
+                    :repositories="storage.repositories.value"
+                    v-model:selectedRepoId="selectedSaveRepoId"
                     @toggle-save="handleToggleSaveCurrent"
                     @play-audio="handlePlayParsedAudio"
                     @play-word-audio="handlePlayWordAudio"
                   />
-                  <!-- 收藏目标仓库选择器 -->
-                  <div class="save-repo-selector-row" v-if="parsedResult && !isCurrentSentenceSaved">
-                    <span class="save-repo-label">保存至：</span>
-                    <select v-model="selectedSaveRepoId" class="glass-select">
-                      <option value="default">🏠 默认仓库</option>
-                      <option v-for="repo in storage.repositories.value.filter(r => r.id !== 'default')" :key="repo.id" :value="repo.id">
-                        📚 {{ repo.name }}
-                      </option>
-                    </select>
-                  </div>
                 </div>
               </div>
             </div>

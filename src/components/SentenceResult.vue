@@ -4,28 +4,60 @@
       
       <!-- 顶部控制条 (收藏按钮) -->
       <div class="card-top-action" v-if="showTopAction">
-        <span class="module-title">解析结果</span>
+        <span class="module-title" v-if="!noCardStyle">智能解析</span>
         
-        <button 
-          v-if="showSaveBtn"
-          class="favorite-btn" 
-          :class="{ 'is-saved': isSaved }"
-          @click="$emit('toggle-save')"
-          :title="isSaved ? '从复习列表中移除' : '加入复习列表'"
-        >
-          <svg class="heart-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-          </svg>
-          {{ isSaved ? '已在复习列表中' : '加入复习列表' }}
-        </button>
+        <div class="top-action-controls" style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+          <!-- 极简目标分类选择器 -->
+          <select 
+            v-if="showRepoSelector && !isSaved" 
+            :value="selectedRepoId" 
+            @change="e => $emit('update:selectedRepoId', (e.target as HTMLInputElement).value)" 
+            class="repo-select-mini"
+            title="选择保存的目标分类"
+          >
+            <option value="default">🏠 默认仓库</option>
+            <option v-for="repo in repositories?.filter(r => r.id !== 'default')" :key="repo.id" :value="repo.id">
+              📚 {{ repo.name }}
+            </option>
+          </select>
+
+          <button 
+            v-if="showSaveBtn"
+            class="favorite-btn" 
+            :class="{ 'is-saved': isSaved }"
+            @click="$emit('toggle-save')"
+            :title="isSaved ? '从复习列表中移除' : '加入复习'"
+          >
+            <svg class="heart-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+            {{ isSaved ? '已在复习' : '加入复习' }}
+          </button>
+        </div>
       </div>
 
       <!-- 核心句子交互展示区 (单词分拆悬浮查词) -->
-      <div class="sentence-interactive-box">
+      <div class="sentence-interactive-box" style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 16px;">
         <InteractiveSentence 
           :words="words" 
           @play-word-audio="playWordAudio"
         />
+        <button 
+          class="copy-icon-btn" 
+          :class="{ 'copied': isCopied }"
+          @click="handleCopyText" 
+          :title="isCopied ? '已复制！' : '复制英文原句'"
+        >
+          <!-- 复制图标 (SVG) -->
+          <svg v-if="!isCopied" class="copy-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <!-- 复制成功勾号图标 (SVG) -->
+          <svg v-else class="copy-success-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </button>
       </div>
 
       <!-- 核心翻译展示区 -->
@@ -114,16 +146,38 @@ const props = withDefaults(
     showSaveBtn?: boolean;
     noCardStyle?: boolean;
     showTopAction?: boolean;
+    selectedRepoId?: string;
+    repositories?: any[];
+    showRepoSelector?: boolean;
   }>(),
   {
     showSaveBtn: true,
     isLoading: false,
     noCardStyle: false,
-    showTopAction: true
+    showTopAction: true,
+    selectedRepoId: 'default',
+    repositories: () => [],
+    showRepoSelector: false
   }
 );
 
-const emit = defineEmits(['toggle-save', 'play-audio', 'update:playRate', 'play-word-audio']);
+const emit = defineEmits(['toggle-save', 'play-audio', 'update:playRate', 'play-word-audio', 'update:selectedRepoId']);
+
+import { ref } from 'vue';
+
+const isCopied = ref(false);
+
+const handleCopyText = async () => {
+  try {
+    await navigator.clipboard.writeText(props.sentence);
+    isCopied.value = true;
+    setTimeout(() => {
+      isCopied.value = false;
+    }, 1500);
+  } catch (err) {
+    console.error('Failed to copy text: ', err);
+  }
+};
 
 // 触发单个单词发音的事件
 const playWordAudio = (word: string, accent: 'US' | 'UK') => {
@@ -495,5 +549,79 @@ const handleSpeedChange = (e: Event) => {
   color: var(--color-primary, #6366f1);
   font-weight: 700;
   text-shadow: 0 0 5px var(--color-primary-glow, rgba(99, 102, 241, 0.1));
+}
+
+/* 复制原句按钮 */
+.copy-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #64748b);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: all var(--transition-fast, 0.2s);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.copy-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary, white);
+  opacity: 1;
+}
+
+.copy-icon-btn.copied {
+  color: var(--color-success, #10b981);
+  background: rgba(16, 185, 129, 0.08);
+  opacity: 1;
+}
+
+.copy-svg-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.copy-success-svg-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* 微型目标分类下拉选高颜值玻璃拟物样式 (与复习页及句子仓库高度一致) */
+.repo-select-mini {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a5b4fc' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px;
+  padding: 6px 28px 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: rgba(15, 15, 25, 0.4);
+  color: #e2e8f0;
+  cursor: pointer;
+  outline: none;
+  transition: all var(--transition-fast, 0.2s);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.repo-select-mini:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(15, 15, 25, 0.6);
+  color: var(--text-primary, white);
+}
+
+.repo-select-mini option {
+  background-color: #1a1a2b;
+  color: #e2e8f0;
+  padding: 6px;
 }
 </style>

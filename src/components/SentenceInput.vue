@@ -31,12 +31,7 @@
     <!-- 底部状态区 (包含提示与提交按钮) -->
     <div class="action-row">
       <span class="tip-text">
-        <svg class="tip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="16" x2="12" y2="12"></line>
-          <line x1="12" y1="8" x2="12.01" y2="8"></line>
-        </svg>
-        提示: 按下 <kbd>Cmd</kbd> + <kbd>Enter</kbd> 可快速解析
+        💡 按 <kbd>Cmd</kbd> + <kbd>Enter</kbd> 快速解析
       </span>
       
       <button 
@@ -45,7 +40,7 @@
         @click="handleSubmit"
       >
         <span v-if="!loading" class="btn-text">
-          智能解析句子
+          开始解析
           <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <line x1="5" y1="12" x2="19" y2="12"></line>
             <polyline points="12 5 19 12 12 19"></polyline>
