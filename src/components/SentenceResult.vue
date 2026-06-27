@@ -475,6 +475,7 @@ const handleSpeedChange = (e: Event) => {
   align-items: center;
   border-top: 1px solid var(--glass-border);
   padding-top: 16px;
+  padding-bottom: 12px;     /* 新增：留出空间给绝对定位向下溢出的口音标签，防止其贴紧底部边框 */
 }
 
 .player-group {

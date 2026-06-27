@@ -176,7 +176,7 @@ defineEmits(['play']);
 /* 口音标签 */
 .accent-tag {
   position: absolute;       /* 绝对定位脱离文档流，不参与垂直居中计算 */
-  bottom: -20px;            /* 完美浮动在发音按钮正下方 */
+  bottom: -24px;            /* 稍微拉开与上方播放按钮的微观间距，由-20px改为-24px */
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.7rem;

@@ -39,8 +39,10 @@
             <!-- A. 智能解析视图 -->
             <div v-if="currentTab === 'analyze'" class="tab-content-view">
               <div class="center-box">
-                <h2 class="section-headline">智能解析</h2>
-                <p class="section-subtitle">输入英语句子，获取精准翻译、音标与逐词解析。</p>
+                <div class="section-header-group">
+                  <h2 class="section-headline">智能解析</h2>
+                  <p class="section-subtitle">输入英语句子，获取精准翻译、音标与逐词解析。</p>
+                </div>
                 
                 <SentenceInput 
                   :loading="parsing" 
@@ -218,8 +220,8 @@
                 <div class="repo-main-content">
                   <div class="repo-header-row">
                     <h2 class="section-headline">
-                      {{ selectedRepoId === 'all' ? '全部句子' : (storage.repositories.value.find(r => r.id === selectedRepoId)?.name || '未名仓库') }}
-                      ({{ filteredSentences.length }})
+                      <span class="repo-title-name">{{ selectedRepoId === 'all' ? '全部句子' : (storage.repositories.value.find(r => r.id === selectedRepoId)?.name || '未名仓库') }}</span>
+                      <span class="repo-title-count">({{ filteredSentences.length }})</span>
                     </h2>
                     
                     <!-- 批量管理与备份按钮组 -->
@@ -241,7 +243,7 @@
                       </div>
                       
                       <!-- 排序下拉选：仅在当前仓库有句子时显示 -->
-                      <div class="repo-sort-control" v-if="filteredSentences.length > 0">
+                      <div class="repo-sort-control" v-if="getRepoSentenceCount(selectedRepoId) > 0">
                         <select v-model="sortOrder" class="glass-select sort-select" title="切换排序方式">
                           <option value="time-desc">最新</option>
                           <option value="time-asc">最早</option>
@@ -249,15 +251,15 @@
                           <option value="alpha-desc">Z-A</option>
                         </select>
                       </div>
-                      <div class="action-divider" v-if="filteredSentences.length > 0"></div>
+                      <div class="action-divider" v-if="getRepoSentenceCount(selectedRepoId) > 0"></div>
 
                       <button
                         class="backup-btn batch-manage"
                         :class="{ 'active': isBatchMode }"
                         @click="toggleBatchMode"
-                        v-if="filteredSentences.length > 0"
+                        v-if="getRepoSentenceCount(selectedRepoId) > 0"
                       >
-                        ⚡ 批量
+                        ⚡ 管理
                       </button>
 
                       <button 
@@ -265,14 +267,14 @@
                         @click="showImportModal = true"
                         title="批量导入学习材料"
                       >
-                        📥 导入材料
+                        📥 导入
                       </button>
                     </div>
                   </div>
 
                   <!-- 批量操作控制台 -->
                   <Transition name="expand">
-                    <div class="batch-control-bar" v-if="isBatchMode && filteredSentences.length > 0">
+                    <div class="batch-control-bar" v-if="isBatchMode && getRepoSentenceCount(selectedRepoId) > 0">
                       <div class="batch-left">
                         <span class="batch-selected-count">已选中 <strong>{{ selectedSentenceIds.length }}</strong> 项</span>
                         <button class="batch-action-link" @click="selectedSentenceIds = selectedSentenceIds.length === filteredSentences.length ? [] : filteredSentences.map(s => s.id)">
@@ -368,7 +370,7 @@
                           </span>
                           <!-- 句子所在仓库标签 -->
                           <span class="meta-repo-tag" v-if="selectedRepoId === 'all'" :title="storage.repositories.value.find(r => r.id === (item.repoId || 'default'))?.name || '默认仓库'">
-                            🏷️ {{ storage.repositories.value.find(r => r.id === (item.repoId || 'default'))?.name || '默认仓库' }}
+                            {{ storage.repositories.value.find(r => r.id === (item.repoId || 'default'))?.name || '默认仓库' }}
                           </span>
                           <span class="meta-time">📅 {{ formatDate(item.addedAt) }}</span>
                           <span class="meta-count">🔄 {{ item.reviewCount }}</span>
@@ -470,8 +472,10 @@
             <!-- D. 系统设置视图 -->
             <div v-else-if="currentTab === 'settings'" class="tab-content-view animate-fade-in">
               <div class="center-box">
-                <h2 class="section-headline">系统设置</h2>
-                <p class="section-subtitle">自定义您的音标口音、发音通道等，打造个性化英语学习工具。</p>
+                <div class="section-header-group">
+                  <h2 class="section-headline">系统设置</h2>
+                  <p class="section-subtitle">自定义您的音标口音、发音通道等，打造个性化英语学习工具。</p>
+                </div>
 
                 <div class="settings-layout">
                   <!-- 左侧侧边栏导航 -->
@@ -2352,9 +2356,9 @@ const filteredSentences = computed(() => {
     });
   }
 
-  // 结合关键字双语搜索过滤
-  if (searchQuery.value.trim()) {
-    const query = searchQuery.value.toLowerCase().trim();
+  // 结合关键字双语搜索过滤并进行防抖后处理
+  if (searchQueryDebounced.value.trim()) {
+    const query = searchQueryDebounced.value.toLowerCase().trim();
     list = list.filter(s => 
       s.text.toLowerCase().includes(query) || 
       (s.translation && s.translation.includes(query))
@@ -2630,6 +2634,20 @@ onMounted(async () => {
 
 // === 句子搜索与编辑抽屉逻辑 ===
 const searchQuery = ref('');
+const searchQueryDebounced = ref('');
+let debounceTimer: any = null;
+watch(searchQuery, (newVal) => {
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+  if (!newVal.trim()) {
+    searchQueryDebounced.value = '';
+  } else {
+    debounceTimer = setTimeout(() => {
+      searchQueryDebounced.value = newVal;
+    }, 300); // 300ms 延迟防抖
+  }
+});
 const showEditDrawer = ref(false);
 const savingEdit = ref(false);
 const editingSentenceId = ref<string | null>(null);
@@ -3406,10 +3424,11 @@ const handleSaveSentenceEdit = async () => {
 }
 
 .meta-repo-tag {
-  background: rgba(99, 102, 241, 0.1);
-  color: #a5b4fc;
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.15);
+  color: #fed7aa;
   font-size: 0.75rem;
-  padding: 2px 6px;
+  padding: 2px 8px;         /* 适当增加内边距让文字更舒展，解决拥挤感 */
   border-radius: 4px;
   font-weight: 600;
 }
@@ -3558,7 +3577,7 @@ const handleSaveSentenceEdit = async () => {
 .app-content {
   flex: 1;
   overflow-y: auto;
-  padding: 40px;
+  padding: 36px;
   position: relative;
 }
 
@@ -3579,22 +3598,29 @@ const handleSaveSentenceEdit = async () => {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+  padding-bottom: 30px; /* 确保滚动到底部时依然有 40px 的下边距 */
+}
+
+.section-header-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;                 /* 强制使主标题与副标题之间保持 2px 极窄间距，防止被父容器 gap 撑开 */
 }
 
 .section-headline {
-  font-size: 1.8rem;
+  font-size: 1.5rem;        /* 统一主标题大小 */
   font-weight: 700;
   letter-spacing: -0.5px;
-  margin-bottom: 6px;       /* 标题与副标题保持极紧密的关系 */
+  line-height: 1.2;         /* 限制行高，防止撑开上下间距 */
+  margin: 0;                /* 消除多余外边距，由容器 gap 统一控制 */
 }
 
 .section-subtitle {
-  font-size: 0.95rem;
+  font-size: 0.9rem;        /* 统一副标题大小 */
   color: var(--text-secondary);
   line-height: 1.6;
-  margin-top: 0;            /* 强制消除额外的上部 margin */
-  margin-bottom: 16px;      /* 宏观上与下方卡片或输入框隔开 */
+  margin: 0;                /* 消除多余外边距，由容器 gap 统一控制 */
 }
 
 /* 解析页面专属样式 */
@@ -3733,9 +3759,19 @@ const handleSaveSentenceEdit = async () => {
 }
 
 .repo-header-row .section-headline {
-  font-size: 1.25rem;       /* 单独缩减句子仓库主标题的字号大小 */
+  font-size: 1.5rem;        /* 统一句子仓库标题大小为 1.5rem */
   letter-spacing: 0;
   margin: 0;
+  display: inline-flex;
+  align-items: flex-end;    /* 将句子个数与句子仓库名称文字底部对齐 */
+  gap: 8px;                 /* 仓库名字和个数之间的间距 */
+}
+
+.repo-header-row .repo-title-count {
+  font-size: 0.9rem;        /* 句子个数字号变小 */
+  font-weight: 500;         /* 句子个数字重变小 */
+  color: var(--text-secondary); /* 颜色变淡，突出主次关系 */
+  margin-bottom: 2px;       /* 微调使其在视觉上更完美地与汉字底部基线对齐 */
 }
 
 .backup-actions {
@@ -3763,7 +3799,7 @@ const handleSaveSentenceEdit = async () => {
   padding: 7px 30px 7px 12px !important;
   font-size: 0.82rem !important;
   cursor: pointer;
-  min-width: 130px;
+  min-width: 90px;          /* 将最小宽度由 130px 缩小至 90px */
 }
 
 /* 排序区与操作按钮区的视觉分隔 */
@@ -3890,19 +3926,22 @@ const handleSaveSentenceEdit = async () => {
 }
 
 .meta-tag {
+  font-size: 0.75rem;       /* 统一字号为 0.75rem，与所属仓库名对齐 */
   font-weight: 700;
-  padding: 1px 6px;
+  padding: 2px 8px;         /* 适当增加内边距让文字更舒展，解决拥挤感 */
   border-radius: 4px;
   text-transform: uppercase;
 }
 
 .meta-tag.learning {
-  background: rgba(99, 102, 241, 0.1);
-  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: #c7d2fe;
 }
 
 .meta-tag.mastered {
-  background: rgba(16, 185, 129, 0.1);
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
   color: #a7f3d0;
 }
 
@@ -4521,7 +4560,7 @@ input:checked + .slider:before {
 }
 
 .review-header-row .section-headline {
-  font-size: 1.25rem;
+  font-size: 1.5rem;        /* 统一卡片复习标题大小为 1.5rem */
   letter-spacing: 0;
   margin: 0;
 }
@@ -5095,12 +5134,13 @@ input:checked + .slider:before {
   height: 14px;
   color: var(--text-muted);
   pointer-events: none;
+  z-index: 2;               /* 提升层级，防止被输入框的背景和毛玻璃滤镜遮盖 */
 }
 
 .search-input {
   width: 170px;
   height: 32px;
-  padding: 6px 30px 6px 30px;
+  padding: 6px 30px 6px 30px; /* 恢复回左右 30px 宽度以保证图标有充足空隙 */
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm, 6px);
@@ -5113,7 +5153,7 @@ input:checked + .slider:before {
 }
 
 .search-input:focus {
-  width: 220px;
+  width: 195px;             /* 点击聚焦时只稍微拓宽，从220px降低为195px，避免变化幅度过大 */
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(99, 102, 241, 0.5);
   box-shadow: 0 0 12px rgba(99, 102, 241, 0.15);
@@ -5127,6 +5167,7 @@ input:checked + .slider:before {
   font-size: 1.1rem;
   user-select: none;
   transition: color 0.2s;
+  z-index: 2;               /* 确保清除按钮悬浮在输入框最上层 */
   display: flex;
   align-items: center;
   justify-content: center;
