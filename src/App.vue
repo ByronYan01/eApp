@@ -1088,7 +1088,7 @@
           
           <div class="modal-body">
             <div class="version-compare">
-              <span class="v-tag old">v0.1.0</span>
+              <span class="v-tag old">v{{ appVersion }}</span>
               <span class="arrow-right">➔</span>
               <span class="v-tag new">v{{ updateVersion }}</span>
             </div>
@@ -1506,7 +1506,7 @@ const testAiConnection = async () => {
 
 const { sentences, loadData } = storage;
 
-const appVersion = ref('0.1.0');
+const appVersion = ref('0.1.9');
 
 // 句子仓库中当前被展开显示解析详情的句子 ID
 const expandedSentenceId = ref<string | null>(null);
@@ -2245,6 +2245,10 @@ const checkForUpdates = async (silent = false) => {
     if (update) {
       updateAvailable.value = true;
       updateVersion.value = update.version;
+      // 双重保险：如果更新包中提供了当前运行的版本，则更新本地版本变量显示
+      if (update.currentVersion) {
+        appVersion.value = update.currentVersion;
+      }
       updateBody.value = update.body || '无详细更新说明';
       showUpdateModal.value = true;
     } else {
