@@ -59,6 +59,8 @@ defineEmits(['play']);
   flex-direction: column;
   align-items: center;
   position: relative;
+  height: 48px;             /* 物理占位严格等于圆形按钮高度，防止气泡干扰垂直居中 */
+  width: 48px;
 }
 
 .play-btn {
@@ -173,7 +175,10 @@ defineEmits(['play']);
 
 /* 口音标签 */
 .accent-tag {
-  margin-top: 6px;
+  position: absolute;       /* 绝对定位脱离文档流，不参与垂直居中计算 */
+  bottom: -20px;            /* 完美浮动在发音按钮正下方 */
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 0.7rem;
   font-weight: 700;
   padding: 2px 6px;
@@ -183,6 +188,7 @@ defineEmits(['play']);
   color: var(--text-secondary);
   border: 1px solid var(--glass-border);
   transition: all var(--transition-fast);
+  white-space: nowrap;      /* 防止字词折行 */
 }
 
 .play-btn-container:hover .accent-tag {

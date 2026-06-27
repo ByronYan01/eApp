@@ -1,9 +1,9 @@
 <template>
   <div class="result-card-container">
-    <div class="result-glass-card">
+    <div class="result-glass-card" :class="{ 'no-card-style': noCardStyle }">
       
       <!-- 顶部控制条 (收藏按钮) -->
-      <div class="card-top-action">
+      <div class="card-top-action" v-if="showTopAction">
         <span class="module-title">解析结果</span>
         
         <button 
@@ -112,10 +112,14 @@ const props = withDefaults(
     audioPlayProvider: string;
     dictionaryProvider: string;
     showSaveBtn?: boolean;
+    noCardStyle?: boolean;
+    showTopAction?: boolean;
   }>(),
   {
     showSaveBtn: true,
-    isLoading: false
+    isLoading: false,
+    noCardStyle: false,
+    showTopAction: true
   }
 );
 
@@ -185,6 +189,15 @@ const handleSpeedChange = (e: Event) => {
   gap: 20px;
 }
 
+.result-glass-card.no-card-style {
+  background: transparent;
+  border: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  padding: 0;
+}
+
 /* 顶部控制栏 */
 .card-top-action {
   display: flex;
@@ -243,10 +256,10 @@ const handleSpeedChange = (e: Event) => {
 
 /* 单词分拆悬浮查词盒子 */
 .sentence-interactive-box {
-  background: rgba(0, 0, 0, 0.12);
-  border-radius: var(--radius-md);
-  padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.02);
+  background: transparent;  /* 彻底消除黑色块背景色 */
+  border-radius: 0;
+  padding: 4px 0;           /* 精细化微调内边距 */
+  border: none;             /* 彻底去噪边框 */
 }
 
 .words-flow {

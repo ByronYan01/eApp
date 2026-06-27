@@ -88,9 +88,17 @@
             <div v-else-if="currentTab === 'review'" class="tab-content-view">
               <div class="center-box">
                 <div class="review-header-row">
-                  <div>
+                  <div class="review-title-group">
                     <h2 class="section-headline">智能复习</h2>
-                    <p class="section-subtitle">基于记忆遗忘曲线，为您筛选今日到期需要强化的句子。</p>
+                    
+                    <!-- 极简复习分类下拉选 -->
+                    <select v-model="selectedReviewRepoId" class="glass-select review-select-compact" title="选择复习分类">
+                      <option value="all">📂 全部 ({{ sentences.length }})</option>
+                      <option value="default">🏠 默认仓库 ({{ getRepoSentenceCount('default') }})</option>
+                      <option v-for="repo in storage.repositories.value.filter(r => r.id !== 'default')" :key="repo.id" :value="repo.id">
+                        📚 {{ repo.name }} ({{ getRepoSentenceCount(repo.id) }})
+                      </option>
+                    </select>
                   </div>
                   <!-- 复习模式切换 Pill -->
                   <div class="review-mode-selector" v-if="reviewQueue.length > 0">
@@ -99,29 +107,15 @@
                       :class="{ 'active': !isRandomReviewMode }" 
                       @click="toggleReviewMode(false)"
                     >
-                      📅 顺序复习
+                      📅 顺序
                     </button>
                     <button 
                       class="mode-pill" 
                       :class="{ 'active': isRandomReviewMode }" 
                       @click="toggleReviewMode(true)"
                     >
-                      🔀 随机复习
+                      🔀 随机
                     </button>
-                  </div>
-                </div>
-
-                <!-- 仓库分类过滤 -->
-                <div class="review-filter-row">
-                  <div class="review-repo-selector">
-                    <span class="review-repo-label">复习分类：</span>
-                    <select v-model="selectedReviewRepoId" class="glass-select">
-                      <option value="all">📂 全部 ({{ sentences.length }})</option>
-                      <option value="default">🏠 默认仓库 ({{ getRepoSentenceCount('default') }})</option>
-                      <option v-for="repo in storage.repositories.value.filter(r => r.id !== 'default')" :key="repo.id" :value="repo.id">
-                        📚 {{ repo.name }} ({{ getRepoSentenceCount(repo.id) }})
-                      </option>
-                    </select>
                   </div>
                 </div>
 
@@ -3646,7 +3640,7 @@ const handleSaveSentenceEdit = async () => {
 .review-zone {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;                /* 缩小进度条与复习卡片之间的间距 */
 }
 
 .review-progress-wrapper {
@@ -3679,7 +3673,7 @@ const handleSaveSentenceEdit = async () => {
 
 .progress-bar-container {
   width: 100%;
-  height: 6px;
+  height: 3px;              /* 进度条厚度减半，变细线，提升高级美感 */
   background: rgba(255, 255, 255, 0.05);
   border-radius: 99px;
   position: relative;
@@ -4524,7 +4518,37 @@ input:checked + .slider:before {
   align-items: center;
   gap: 24px;
   width: 100%;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.review-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.review-header-row .section-headline {
+  font-size: 1.25rem;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.review-select-compact {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-secondary);
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.review-select-compact:hover {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
 }
 
 /* 适配窄屏排版 */

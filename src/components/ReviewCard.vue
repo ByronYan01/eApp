@@ -3,7 +3,7 @@
     <!-- A. 状态页眉 -->
     <div class="test-header">
       <span class="status-badge" :class="{ 'revealed': isAnswerRevealed }">
-        {{ isAnswerRevealed ? 'ANSWER · 智能解析已揭晓' : 'RECALLING · 英文原声盲听中' }}
+        {{ isAnswerRevealed ? 'ANSWER · 解析已揭晓' : 'RECALLING · 原声盲听' }}
       </span>
       <span class="step-badge">艾宾浩斯阶段 {{ item.reviewCount }}</span>
     </div>
@@ -19,7 +19,7 @@
         </div>
         <span class="ear-icon">🎧</span>
       </div>
-      <p class="listening-tip">正在播放英文原声，请仔细辨音并回想整句含义...</p>
+      <p class="listening-tip">请仔细辨音并回想整句含义...</p>
       
       <!-- 盲听模式音频操作组 -->
       <div class="audio-control-row">
@@ -51,7 +51,7 @@
       <div class="reveal-action-box">
         <button class="reveal-trigger-btn" @click="revealAnswer">
           <span class="reveal-trigger-icon">🔑</span>
-          看原句与智能解析结果
+          查看解析
           <span class="btn-shortcut-pill">Space</span>
         </button>
       </div>
@@ -74,6 +74,8 @@
         :audioPlayProvider="storage.settings.value.audioPlayProvider"
         :dictionaryProvider="storage.settings.value.dictionaryProvider"
         :showSaveBtn="false"
+        :noCardStyle="true"
+        :showTopAction="false"
         @play-audio="playTTS(item.text, $event)"
         @play-word-audio="playWordTTS"
       />
@@ -96,7 +98,7 @@
               <line x1="15" y1="9" x2="9" y2="15"></line>
               <line x1="9" y1="9" x2="15" y2="15"></line>
             </svg>
-            没记住，需强化
+            没记住
             <span class="key-hint">1</span>
           </button>
 
@@ -104,7 +106,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
-            记住了，下一关
+            记住了
             <span class="key-hint">2</span>
           </button>
         </div>
@@ -267,11 +269,11 @@ onUnmounted(() => {
   -webkit-backdrop-filter: var(--glass-blur, blur(20px));
   border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.05));
   border-radius: var(--radius-lg, 16px);
-  padding: 32px;
+  padding: 20px 24px;       /* 紧凑内边距 */
   box-shadow: var(--glass-shadow, 0 8px 32px rgba(0, 0, 0, 0.15));
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;                /* 缩小内部垂直间距 */
   transition: all var(--transition-normal, 0.3s) ease;
 }
 
@@ -281,7 +283,7 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px dashed var(--glass-border, rgba(255, 255, 255, 0.05));
-  padding-bottom: 14px;
+  padding-bottom: 10px;     /* 收窄下边距 */
 }
 
 .status-badge {
@@ -314,26 +316,26 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 20px;
-  padding: 24px 0;
+  gap: 16px;                /* 缩小微观间距 */
+  padding: 16px 0;          /* 收窄内边距 */
   width: 100%;
 }
 
 .listening-icon-wrapper {
   position: relative;
-  width: 100px;
-  height: 100px;
+  width: 80px;              /* 缩减耳机雷达盒尺寸 */
+  height: 80px;
   background: rgba(99, 102, 241, 0.05);
   border: 1px solid rgba(99, 102, 241, 0.15);
   border-radius: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 0px;       /* 移除冗杂底边距，由父容器gap集中管理 */
 }
 
 .ear-icon {
-  font-size: 2.5rem;
+  font-size: 2rem;          /* 微型化耳机图标 */
   z-index: 2;
   animation: float 3s ease-in-out infinite alternate;
 }
@@ -478,7 +480,7 @@ onUnmounted(() => {
 .detail-divider {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--glass-border, rgba(255,255,255,0.05)), transparent);
-  margin: 8px 0;
+  margin: 4px 0;             /* 收紧上下外边距 */
   border: none;
 }
 
@@ -486,7 +488,7 @@ onUnmounted(() => {
 .revealed-details-container {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;                /* 缩小翻开卡片后的模块间隙 */
 }
 
 /* 底部操作区 */
@@ -495,14 +497,14 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  margin-top: 8px;
+  margin-top: 4px;          /* 缩窄评分栏顶距 */
 }
 
 .back-to-test-btn {
   background: rgba(255, 255, 255, 0.02);
   color: var(--text-secondary, #94a3b8);
   border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.05));
-  padding: 10px 20px;
+  padding: 8px 16px;         /* 紧凑内边距 */
   border-radius: var(--radius-md, 10px);
   font-size: 0.85rem;
   font-weight: 600;
@@ -527,9 +529,9 @@ onUnmounted(() => {
 .rate-button {
   flex: 1;
   max-width: 200px;
-  padding: 12px 20px;
+  padding: 10px 16px;        /* 紧凑内边距 */
   border-radius: var(--radius-md, 10px);
-  font-size: 0.9rem;
+  font-size: 0.85rem;        /* 调小字号 */
   font-weight: 700;
   cursor: pointer;
   display: flex;
