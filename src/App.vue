@@ -1485,7 +1485,7 @@ const testAiConnection = async () => {
 
 const { sentences, loadData } = storage;
 
-const appVersion = ref('0.1.9');
+const appVersion = ref('0.1.11');
 
 // 句子仓库中当前被展开显示解析详情的句子 ID
 const expandedSentenceId = ref<string | null>(null);
