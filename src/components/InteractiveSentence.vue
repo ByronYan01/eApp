@@ -5,33 +5,44 @@
       :key="index"
       class="interactive-word-span"
       :class="{ 'has-info': !!word.clean }"
+      @mouseenter="handleWordMouseEnter($event, word)"
+      @mouseleave="handleWordMouseLeave"
     >
       {{ word.original }}
-      
-      <!-- 悬浮微光查词浮窗 (Tooltip Popover) -->
-      <span class="word-tooltip" v-if="word.clean && (word.explain || word.phonetic)">
-        <span class="tooltip-arrow"></span>
+    </span>
+
+    <!-- 悬浮微光查词浮窗 (单例 + Teleport 传送至 body 最顶层，彻底脱离任何卡片或容器的裁剪) -->
+    <Teleport to="body">
+      <div 
+        class="word-tooltip-portal" 
+        v-if="activeWord"
+        :style="tooltipStyle"
+        @mouseenter="cancelHide"
+        @mouseleave="handleWordMouseLeave"
+      >
+        <span class="tooltip-arrow" :class="{ 'placement-bottom': tooltipPlacement === 'bottom' }"></span>
         <div class="tooltip-header">
-          <span class="tooltip-word">{{ word.clean }}</span>
+          <span class="tooltip-word">{{ activeWord.clean }}</span>
           <div class="tooltip-speaker-group">
             <!-- 单个单词美音发音按钮 -->
-            <button class="tooltip-speaker-btn" @click.stop="playWordAudio(word.clean, 'US')" title="美音发音">
+            <button class="tooltip-speaker-btn" @click.stop="playWordAudio(activeWord.clean, 'US')" title="美音发音">
               US 🔊
             </button>
             <!-- 单个单词英音发音按钮 -->
-            <button class="tooltip-speaker-btn" @click.stop="playWordAudio(word.clean, 'UK')" title="英音发音">
+            <button class="tooltip-speaker-btn" @click.stop="playWordAudio(activeWord.clean, 'UK')" title="英音发音">
               UK 🔊
             </button>
           </div>
         </div>
-        <span class="tooltip-phonetic" v-if="word.phonetic">{{ word.phonetic }}</span>
-        <span class="tooltip-explain">{{ word.explain || '暂无详细解释' }}</span>
-      </span>
-    </span>
+        <span class="tooltip-phonetic" v-if="activeWord.phonetic">{{ activeWord.phonetic }}</span>
+        <span class="tooltip-explain">{{ activeWord.explain || '暂无详细解释' }}</span>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, onUnmounted } from 'vue';
 import type { WordDetail } from '../composables/useStorage';
 
 // 定义组件的 Props，允许传入单词详情列表、自定义字号及紧凑模式开关
@@ -50,6 +61,114 @@ const emit = defineEmits<{
 const playWordAudio = (word: string, accent: 'US' | 'UK') => {
   emit('play-word-audio', word, accent);
 };
+
+// 单例悬浮窗状态
+const activeWord = ref<WordDetail | null>(null);
+const tooltipPlacement = ref<'top' | 'bottom'>('top');
+const tooltipStyle = ref<Record<string, string>>({
+  position: 'fixed',
+  left: '0px',
+  top: '0px',
+  opacity: '0',
+  visibility: 'hidden',
+  transform: 'translate(-50%, -100%) scale(0.9)',
+  transition: 'opacity 0.2s, transform 0.2s'
+});
+
+let hideTimer: any = null;
+
+const handleWordMouseEnter = (event: MouseEvent, word: WordDetail) => {
+  if (!word.clean || (!word.explain && !word.phonetic)) return;
+  
+  // 清除延迟隐藏计时器
+  if (hideTimer) {
+    clearTimeout(hideTimer);
+    hideTimer = null;
+  }
+
+  activeWord.value = word;
+
+  const target = event.currentTarget as HTMLElement;
+  const targetRect = target.getBoundingClientRect();
+
+  // Tooltip 尺寸设定与视口物理边界限制
+  const tooltipWidth = 210;
+  const tooltipHeight = 135; // 结合音标及两行释义预估的极限高度
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  // 初始计算位置 (默认在单词正上方 8px 处)
+  let left = targetRect.left + targetRect.width / 2;
+  let top = targetRect.top - 8;
+  let placement: 'top' | 'bottom' = 'top';
+
+  // 1. 垂直避让：如果上方空间不足以容纳悬浮窗 (top < tooltipHeight + 15)，且下方有足够空间，则改为向下弹出
+  if (targetRect.top < tooltipHeight + 15 && targetRect.bottom + tooltipHeight + 15 < viewportHeight) {
+    top = targetRect.bottom + 8;
+    placement = 'bottom';
+  }
+
+  // 2. 水平避让：防止悬浮框在靠近屏幕左侧或右侧时超出视口边界而被截断
+  const safetyMargin = 12; // 贴边最小安全距离 (px)
+  const minLeft = tooltipWidth / 2 + safetyMargin;
+  const maxLeft = viewportWidth - tooltipWidth / 2 - safetyMargin;
+
+  if (left < minLeft) {
+    left = minLeft;
+  } else if (left > maxLeft) {
+    left = maxLeft;
+  }
+
+  tooltipPlacement.value = placement;
+
+  // 更新浮窗显示状态与样式
+  tooltipStyle.value = {
+    position: 'fixed',
+    left: `${left}px`,
+    top: `${top}px`,
+    opacity: '1',
+    visibility: 'visible',
+    transform: placement === 'top' 
+      ? 'translate(-50%, -100%) scale(1)' 
+      : 'translate(-50%, 0) scale(1)',
+    transition: 'opacity 0.2s, transform 0.2s, left 0.15s ease-out, top 0.15s ease-out',
+    zIndex: '99999' // 赋以最高的层叠高度，永远凌驾于多卡片层之上
+  };
+};
+
+const handleWordMouseLeave = () => {
+  // 延时 120ms 触发隐藏，给鼠标从单词移入浮窗进行发音交互留出合理的空档时间
+  hideTimer = setTimeout(() => {
+    hideTooltip();
+  }, 120);
+};
+
+const cancelHide = () => {
+  // 鼠标移入浮窗内部，取消隐藏
+  if (hideTimer) {
+    clearTimeout(hideTimer);
+    hideTimer = null;
+  }
+};
+
+const hideTooltip = () => {
+  tooltipStyle.value.opacity = '0';
+  tooltipStyle.value.visibility = 'hidden';
+  tooltipStyle.value.transform = tooltipPlacement.value === 'top'
+    ? 'translate(-50%, -100%) scale(0.9)'
+    : 'translate(-50%, 0) scale(0.9)';
+  
+  // 动画淡出后彻底移除 DOM 渲染以节省系统资源
+  setTimeout(() => {
+    if (tooltipStyle.value.opacity === '0') {
+      activeWord.value = null;
+    }
+  }, 200);
+};
+
+onUnmounted(() => {
+  if (hideTimer) clearTimeout(hideTimer);
+});
 </script>
 
 <style scoped>
@@ -89,12 +208,8 @@ const playWordAudio = (word: string, accent: 'US' | 'UK') => {
   transform: translateY(-2px);
 }
 
-/* 单词悬浮卡片 (Tooltip Popover) */
-.word-tooltip {
-  position: absolute;
-  bottom: 125%; /* 在单词正上方展示 */
-  left: 50%;
-  transform: translateX(-50%) scale(0.9);
+/* 顶级 Portal 单词悬浮卡片 (Tooltip Popover) */
+.word-tooltip-portal {
   background: #0f172a; /* 极深的暗卡片，让文字更凸显 */
   color: white;
   padding: 10px 14px;
@@ -104,11 +219,7 @@ const playWordAudio = (word: string, accent: 'US' | 'UK') => {
   font-size: 0.85rem;
   line-height: 1.4;
   text-align: left;
-  z-index: 100;
   pointer-events: auto; /* 允许鼠标划入浮窗进行发音交互 */
-  opacity: 0;
-  visibility: hidden;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .tooltip-arrow {
@@ -120,11 +231,12 @@ const playWordAudio = (word: string, accent: 'US' | 'UK') => {
   border-top-color: #0f172a;
 }
 
-/* 触发展示 */
-.interactive-word-span:hover .word-tooltip {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) scale(1);
+/* 垂直向下避让时，小箭头翻转到顶部 */
+.tooltip-arrow.placement-bottom {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: #0f172a;
 }
 
 /* 浮窗内部头部排版 */

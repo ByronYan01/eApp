@@ -313,8 +313,28 @@
                       </div>
 
                       <div class="repo-card-main">
-                        <div class="repo-card-text selectable" @click="isBatchMode ? toggleSelectSentence(item.id) : null">{{ item.text }}</div>
-                        <div class="repo-card-translation selectable">{{ item.translation }}</div>
+                        <!-- 句子文本首行：小箭头与英文句子 -->
+                        <div 
+                          class="repo-card-text-row" 
+                          :class="{ 'clickable': !isBatchMode }"
+                          @click="isBatchMode ? null : handleCardRowClick(item.id)"
+                        >
+                          <span class="expand-arrow-icon" :class="{ 'is-expanded': expandedSentenceId === item.id }">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                              <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                          </span>
+                          <div class="repo-card-text selectable">{{ item.text }}</div>
+                        </div>
+
+                        <!-- 句子中文翻译行 -->
+                        <div 
+                          class="repo-card-translation selectable"
+                          :class="{ 'clickable': !isBatchMode }"
+                          @click="isBatchMode ? null : handleCardRowClick(item.id)"
+                        >
+                          {{ item.translation }}
+                        </div>
 
                         <!-- 智能解析展开部分 -->
                         <Transition name="expand">
@@ -339,107 +359,66 @@
                                 整句连读音标：<span>{{ item.phonetics }}</span>
                               </div>
                             </div>
-
-                            <!-- 3. 重点词汇分析列表 -->
-                            <div v-if="item.words && item.words.length > 0" class="detail-section">
-                              <h4 class="detail-title">重点词汇释义：</h4>
-                              <div class="detail-words-grid">
-                                <div 
-                                  v-for="word in item.words.filter(w => w.clean && w.explain && w.explain !== '暂无单词释义' && w.explain !== '查询失败')" 
-                                  :key="word.clean" 
-                                  class="detail-word-chip"
-                                >
-                                  <div class="chip-word-header">
-                                    <span class="chip-word-name">{{ word.clean }}</span>
-                                    <span class="chip-word-phonetic" v-if="word.phonetic">{{ word.phonetic }}</span>
-                                    <div class="chip-word-speakers">
-                                      <button class="chip-speaker-btn" @click.stop="handlePlayWordAudio(word.clean, 'US')" title="美音发音">US 🔊</button>
-                                      <button class="chip-speaker-btn" @click.stop="handlePlayWordAudio(word.clean, 'UK')" title="英音发音">UK 🔊</button>
-                                    </div>
-                                  </div>
-                                  <p class="chip-word-explain">{{ word.explain }}</p>
-                                </div>
-                              </div>
-                            </div>
                           </div>
                         </Transition>
 
-                        <div class="repo-card-meta" @click.stop>
-                          <span class="meta-tag" :class="item.status">
-                            {{ item.status === 'learning' ? '学习中' : '已掌握' }}
-                          </span>
-                          <!-- 句子所在仓库标签 -->
-                          <span class="meta-repo-tag" v-if="selectedRepoId === 'all'" :title="storage.repositories.value.find(r => r.id === (item.repoId || 'default'))?.name || '默认仓库'">
-                            {{ storage.repositories.value.find(r => r.id === (item.repoId || 'default'))?.name || '默认仓库' }}
-                          </span>
-                          <span class="meta-time">📅 {{ formatDate(item.addedAt) }}</span>
-                          <span class="meta-count">🔄 {{ item.reviewCount }}</span>
-                          
-                          <!-- 展开/收起文字提示按钮 -->
-                          <button 
-                            class="meta-expand-toggle-btn"
-                            @click="toggleExpandSentence(item.id)"
-                          >
-                            {{ expandedSentenceId === item.id ? '收起 ▲' : '详情 ▼' }}
-                          </button>
+                        <!-- 页脚行：左侧元信息，右侧操作按钮 -->
+                        <div class="repo-card-footer" @click.stop>
+                          <div class="repo-card-meta">
+                            <span class="meta-tag" :class="item.status">
+                              {{ item.status === 'learning' ? '学习中' : '已掌握' }}
+                            </span>
+                            <!-- 句子所在仓库标签 -->
+                            <span class="meta-repo-tag" v-if="selectedRepoId === 'all'" :title="storage.repositories.value.find(r => r.id === (item.repoId || 'default'))?.name || '默认仓库'">
+                              {{ storage.repositories.value.find(r => r.id === (item.repoId || 'default'))?.name || '默认仓库' }}
+                            </span>
+                            <span class="meta-time">📅 {{ formatDate(item.addedAt) }}</span>
+                            <span class="meta-count">🔄 {{ item.reviewCount }}</span>
+                          </div>
+
+                          <div class="repo-card-actions">
+                            <!-- 朗读按钮 -->
+                            <button 
+                              class="action-circle-btn mini" 
+                              @click="tts.play(item.text, storage.settings.value.phoneticAccent, tts.playRate.value, storage.settings.value.audioPlaySource, storage.settings.value.audioPlayProvider, storage.settings.value.audioTimeout)" 
+                              title="朗读句子"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                              </svg>
+                            </button>
+                            <!-- 编辑该句子按钮 -->
+                            <button 
+                              class="action-circle-btn mini edit" 
+                              @click="openEditDrawer(item)" 
+                              title="编辑该句子"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                              </svg>
+                            </button>
+                            <!-- 切换掌握状态 -->
+                            <button 
+                              class="action-circle-btn mini check" 
+                              :class="{ 'active': item.status === 'mastered' }"
+                              @click="storage.toggleStatus(item.id)"
+                              :title="item.status === 'mastered' ? '设为学习中' : '设为已掌握'"
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                              </svg>
+                            </button>
+                            <!-- 删除按钮 -->
+                            <button class="action-circle-btn mini trash" @click="storage.deleteSentence(item.id)" title="删除句子">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                              </svg>
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                      
-                      <div class="repo-card-actions" @click.stop>
-                        <!-- 解析详情切换按钮 -->
-                        <button 
-                          class="action-circle-btn info"
-                          :class="{ 'active': expandedSentenceId === item.id }"
-                          @click="toggleExpandSentence(item.id)"
-                          :title="expandedSentenceId === item.id ? '收起解析' : '查看解析详情'"
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                            <line x1="11" y1="8" x2="11" y2="14"></line>
-                            <line x1="8" y1="11" x2="14" y2="11"></line>
-                          </svg>
-                        </button>
-                        <!-- 朗读按钮 -->
-                        <button 
-                          class="action-circle-btn" 
-                          @click="tts.play(item.text, storage.settings.value.phoneticAccent, tts.playRate.value, storage.settings.value.audioPlaySource, storage.settings.value.audioPlayProvider, storage.settings.value.audioTimeout)" 
-                          title="朗读句子"
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                          </svg>
-                        </button>
-                        <!-- 编辑该句子按钮 -->
-                        <button 
-                          class="action-circle-btn edit" 
-                          @click="openEditDrawer(item)" 
-                          title="编辑该句子"
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                          </svg>
-                        </button>
-                        <!-- 切换掌握状态 -->
-                        <button 
-                          class="action-circle-btn check" 
-                          :class="{ 'active': item.status === 'mastered' }"
-                          @click="storage.toggleStatus(item.id)"
-                          :title="item.status === 'mastered' ? '设为学习中' : '设为已掌握'"
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                          </svg>
-                        </button>
-                        <!-- 删除按钮 -->
-                        <button class="action-circle-btn trash" @click="storage.deleteSentence(item.id)" title="删除句子">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                          </svg>
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -1519,6 +1498,16 @@ const toggleExpandSentence = (id: string) => {
     expandedSentenceId.value = id;
   }
 };
+
+// 处理句子卡片文本行点击事件，防止与划词/复制动作冲突
+const handleCardRowClick = (id: string) => {
+  const selection = window.getSelection();
+  if (selection && selection.toString().trim().length > 0) {
+    return; // 如果有选中的文本，说明用户在进行选择/复制操作，不触发折叠
+  }
+  toggleExpandSentence(id);
+};
+
 
 // 句子智能解析过程中的响应式状态
 const parsing = ref(false);
@@ -3873,18 +3862,21 @@ const handleSaveSentenceEdit = async () => {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
-  padding: 20px;
+  padding: 16px 20px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 16px;
   transition: all var(--transition-fast);
+  position: relative; /* 开启定位基准，并为层级提权做准备 */
+  z-index: 1;         /* 默认普通卡片层叠层级 */
 }
 
 .sentence-repo-card:hover {
   background: var(--glass-bg-hover);
   border-color: var(--glass-border-hover);
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  z-index: 2;         /* 鼠标悬浮时微调提升层级，高于普通卡片 */
 }
 
 .repo-card-main {
@@ -3892,6 +3884,50 @@ const handleSaveSentenceEdit = async () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: 100%;
+}
+
+/* 句子行包含折叠箭头与英文文本 */
+.repo-card-text-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  transition: all var(--transition-fast);
+}
+
+.repo-card-text-row.clickable {
+  cursor: pointer;
+}
+
+.repo-card-text-row.clickable:hover .repo-card-text {
+  color: var(--color-primary, #6366f1);
+}
+
+.repo-card-text-row.clickable:hover .expand-arrow-icon {
+  color: var(--color-primary, #6366f1);
+}
+
+.expand-arrow-icon {
+  margin-top: 3px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  transition: transform var(--transition-normal, 0.3s) cubic-bezier(0.25, 0.8, 0.25, 1), color var(--transition-fast);
+}
+
+.expand-arrow-icon.is-expanded {
+  transform: rotate(90deg);
+  color: var(--color-primary, #6366f1);
+}
+
+.expand-arrow-icon svg {
+  width: 14px;
+  height: 14px;
 }
 
 .repo-card-text {
@@ -3899,12 +3935,34 @@ const handleSaveSentenceEdit = async () => {
   font-weight: 600;
   line-height: 1.4;
   color: var(--text-primary);
+  flex: 1;
 }
 
 .repo-card-translation {
   font-size: 0.95rem;
   color: var(--text-secondary);
   line-height: 1.4;
+  padding-left: 24px; /* 缩进以和带小箭头的英文文本对齐 */
+  transition: color var(--transition-fast);
+}
+
+.repo-card-translation.clickable {
+  cursor: pointer;
+}
+
+.repo-card-translation.clickable:hover {
+  color: var(--text-primary);
+}
+
+/* 底部操作区页脚 */
+.repo-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  gap: 16px;
+  width: 100%;
+  flex-wrap: wrap;
 }
 
 .repo-card-meta {
@@ -3913,7 +3971,6 @@ const handleSaveSentenceEdit = async () => {
   font-size: 0.75rem;
   color: var(--text-muted);
   align-items: center;
-  margin-top: 4px;
   flex-wrap: wrap;          /* 宽度不够时整体折行，防单字折行 */
 }
 
@@ -3952,6 +4009,21 @@ const handleSaveSentenceEdit = async () => {
 .repo-card-actions {
   display: flex;
   gap: 10px;
+  align-items: center;
+}
+
+/* 微型版控制按钮 */
+.action-circle-btn.mini {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.action-circle-btn.mini svg {
+  width: 13px;
+  height: 13px;
 }
 
 .action-circle-btn {
@@ -4889,6 +4961,8 @@ input:checked + .slider:before {
   border-color: rgba(99, 102, 241, 0.3);
   box-shadow: 0 8px 24px rgba(99, 102, 241, 0.1);
   background: rgba(255, 255, 255, 0.03);
+  position: relative; /* 激活层级定位 */
+  z-index: 5 !important; /* 强制提升展开状态下的卡片层级，杜绝任何邻近卡片的遮挡 */
 }
 
 .meta-expand-toggle-btn {
